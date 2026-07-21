@@ -1,104 +1,103 @@
 # Snippet Dashboard
 
-A minimal Vue 3 wrapper that acts as a single entry point for independent,
-self-contained HTML snippets — small standalone tools like a calculator, a
-visualiser, a form. Each snippet lives in its own folder, runs in its own
-iframe, and knows nothing about the others. Add, change, or delete one without
-touching or breaking any other.
+One page that lists and renders a pile of standalone HTML snippets. A snippet is
+a small self-contained tool (a calculator, a quiz, a visualiser) that lives in
+its own folder, runs in its own iframe, and knows nothing about the others. Add,
+change, or delete one without touching the rest.
 
-The wrapper itself has exactly one runtime dependency: **Vue**. Everything else
-is the Vite/TypeScript toolchain.
+The wrapper has exactly one runtime dependency: Vue. Everything else is the
+Vite/TypeScript toolchain.
 
 ## Quick start
 
 ```bash
 npm install
-npm run dev      # generates the manifest, then starts Vite
+npm run dev      # builds the manifest, then starts Vite
 ```
 
-Open the printed URL. The sidebar lists every snippet; clicking one loads it.
-The selected snippet is reflected in the URL hash (`#/r34-rechner`), so links
-are shareable and the back button works.
+Open the printed URL. The sidebar lists every snippet; click one to load it. The
+active snippet is stored in the URL hash (`#/r34-rechner`), so links are
+shareable and the back button works.
 
 ```bash
-npm run build    # type-check + production build into dist/
-npm run preview  # serve the production build locally
+npm run build    # typecheck + production build into dist/
+npm run preview  # serve that build locally
 ```
 
-## Adding & editing snippets
+## Run it with Docker
 
-There are two ways to manage snippets.
+The production build is static, so the image is a two-stage build: Node builds
+it, nginx serves it.
 
-### With the editor (dev only)
+```bash
+docker compose up -d --build
+```
 
-Run `npm run dev` and use the sidebar:
+That serves the dashboard on http://localhost:8080. Change the port in
+`docker-compose.yml` if 8080 is taken. Prebuilt images land on GHCR on every
+push to `main`, so a homelab can pull instead of build. Sub-path deploys,
+pulling the image, and adding snippets to a running instance are all in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-- **+ Neues Snippet** opens an empty editor — type an id, some metadata, and
-  HTML, watch the live preview, and save. The folder is written and registered
-  automatically.
-- The **✎** on any snippet opens it for editing; the editor can also delete it.
+## Adding snippets
 
-The editor works in both environments; only where it saves differs. In
-**development** it writes real files under `public/snippets/` through the
-dev-server API and regenerates the manifest — permanent and commit-ready. In
-the **static production build** there is no backend, so it saves to this
-browser's storage instead. Browser snippets are per-device and live in a layer
-separate from the deployed files, so app updates never conflict with them; use
-**Herunterladen** to export one into `public/snippets/` if you want to commit
-it. See `docs/ARCHITECTURE.md` → *Two layers* for the details.
+Two routes, same result on disk.
 
-### By hand
+**With the editor.** Run `npm run dev` and use the sidebar. "+ Neues Snippet"
+opens an empty editor: type an id, some metadata, and HTML, watch the live
+preview, save. The "✎" on any snippet opens it for editing or deletion. In dev
+the editor writes real files under `public/snippets/` and regenerates the
+manifest, so the result is commit-ready. The static build has no backend, so
+there it saves to the browser instead; those snippets are per-device and never
+collide with a deploy. "Herunterladen" exports one so you can drop it into
+`public/snippets/` and commit it. Full walkthrough in
+[docs/SNIPPETS.md](docs/SNIPPETS.md).
 
-The editor is just a convenience over the file layout, so the manual route is
-identical in effect:
+**By hand.**
 
 1. Copy `public/snippets/_template/` to `public/snippets/<your-id>/`.
-2. Replace `index.html` with your standalone HTML.
+2. Replace `index.html` with your standalone page.
 3. Edit `meta.json` (or delete it to fall back to defaults).
 4. Run `npm run dev` (or `npm run snippets:manifest`).
 
-Either way: a snippet is any folder under `public/snippets/` that contains an
-`index.html`. Folders starting with `_` or `.` are ignored (that is why
-`_template` never shows up).
-
+Either way, a snippet is any folder under `public/snippets/` with an
+`index.html`. Folders starting with `_` or `.` are skipped, which is why
+`_template` never shows up.
 
 ## What "self-contained" means
 
-Snippets are served as static files and loaded in a sandboxed `<iframe>`. That
-gives each one its own document, its own CSS scope, and its own JavaScript
-globals. A snippet **may** pull in its own dependencies (e.g. a CDN `<script>`),
-but the wrapper actively supports only plain HTML snippets — there is no build
-step or framework contract imposed on them.
+Snippets are static files loaded in a sandboxed iframe, so each one gets its own
+document, its own CSS scope, and its own JavaScript globals. A snippet can pull
+in its own dependencies (a CDN script, say), but the wrapper imposes no build
+step and no framework on it. Plain HTML is the whole contract. The sandbox and
+dark-mode notes are in [docs/SNIPPETS.md](docs/SNIPPETS.md).
 
 ## Project layout
 
 ```
-public/snippets/           # the snippets — pure static files
-  _template/               #   copy-me starter (ignored by the generator)
-  r34-rechner/             #   a real snippet: index.html + meta.json
-  manifest.json            #   generated; do not edit by hand
+public/snippets/           the snippets, pure static files
+  _template/               copy-me starter (ignored by the generator)
+  r34-rechner/             a real snippet: index.html + meta.json
+  manifest.json            generated, do not edit by hand
 scripts/
-  generate-manifest.mjs    # scans public/snippets/, writes manifest.json
+  generate-manifest.mjs    scans public/snippets/, writes manifest.json
+  vite-plugin-snippets.mjs dev-only file API behind the editor
 src/
-  components/              # presentational: TheSidebar, SnippetFrame, AppEmptyState
-  composables/             # useSnippets (data), useHashRoute (navigation)
-  services/                # snippetService — the only place that fetches
-  utils/                   # pure helpers (joinBase)
-  types/                   # Snippet, SnippetManifest
-  assets/                  # tokens.css (theme), main.css (base)
-  config.ts                # shared constants
-  App.vue                  # the container that wires it together
-docs/ARCHITECTURE.md       # the detailed write-up
+  components/              presentational: sidebar, iframe, empty state, editor
+  composables/             useSnippets (data), useHashRoute (nav), useSnippetEditor
+  services/                the only place that fetches or touches storage
+  utils/                   pure helpers (joinBase)
+  types/                   Snippet, SnippetManifest, meta shapes
+  assets/                  tokens.css (theme), main.css (base)
+  config.ts                shared constants
+  App.vue                  the container that wires it together
+docker/                    nginx config for the image
+docs/                      the write-ups (see below)
 ```
 
-## Deployment
+## Docs
 
-Static output. Any static host works. For a project sub-path (e.g. GitHub
-Pages at `/repo-name/`), set the base:
-
-```bash
-VITE_BASE=/repo-name/ npm run build
-```
-
-See `docs/ARCHITECTURE.md` for the reasoning behind the design and the full
-snippet contract.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the pieces fit and why the design is what it is.
+- [docs/SNIPPETS.md](docs/SNIPPETS.md): writing snippets, from the folder contract to `meta.json`, the editor, and sandboxing.
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): Docker, static hosting, base paths, updating a live instance.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): local setup, the scripts, the dev file API, and every config knob.

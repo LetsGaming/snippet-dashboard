@@ -1,0 +1,19 @@
+services:
+  snippet-dashboard:
+    build:
+      context: .
+      # Uncomment for a sub-path deploy behind a reverse proxy:
+      # args:
+      #   VITE_BASE: /snippets/
+    image: snippet-dashboard:latest
+    container_name: snippet-dashboard
+    ports:
+      # host:container. Change 8888 if the port is taken.
+      - "8888:80"
+    restart: unless-stopped
+
+    # Serving extra snippets from outside the image is possible but needs a
+    # manifest that already lists them. Generate it on the host first
+    # (`npm run snippets:manifest`), then mount the folder read-only:
+    # volumes:
+    #   - ./public/snippets:/usr/share/nginx/html/snippets:ro

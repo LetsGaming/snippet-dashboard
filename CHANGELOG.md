@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Docker deployment.** Two-stage build (Node build, then `nginx:alpine`), a
+  `docker-compose.yml`, a `.dockerignore`, and an nginx config with a hash-router
+  fallback and cache headers split by file type. `VITE_BASE` is a build arg for
+  sub-path deploys.
+- CI workflow `docker.yml`: builds the image on pull requests, publishes to GHCR
+  on `main` and `v*` tags.
+
+### Changed
+- Docs cover more than architecture now: added `DEPLOYMENT.md` (Docker, static
+  hosting, sub-paths, updating a live instance), `SNIPPETS.md` (authoring,
+  `meta.json` reference, the editor, sandboxing), and `DEVELOPMENT.md` (scripts,
+  the dev file API, config reference). README and `ARCHITECTURE.md` rewritten.
+
 ## [0.3.0] - 2026-07-21
 
 ### Added
@@ -18,7 +32,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Deterministic override: a user snippet with the same id as a bundled one wins,
   is flagged in the sidebar and editor, and can be reset to the shipped version.
 - Editor repository abstraction (`snippetRepository`): dev writes files through
-  the dev-server API; production writes browser storage — transparent to the UI.
+  the dev-server API; production writes browser storage, transparent to the UI.
 - "Herunterladen" in the editor exports a snippet's HTML, so a browser-only
   snippet can be deliberately promoted into `public/snippets/` and committed.
 - Tighter default sandbox for user (`srcdoc`) snippets: `allow-scripts` only,
@@ -58,11 +72,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Auto-generated snippet manifest via `scripts/generate-manifest.mjs`, run
   automatically on `predev` / `prebuild`.
 - Optional per-snippet `meta.json` (title, description, tags, order, sandbox).
-- Hash-based navigation with deep-linkable snippet URLs (`#/<id>`) — no router
+- Hash-based navigation with deep-linkable snippet URLs (`#/<id>`), no router
   dependency.
 - Design-token theming (`tokens.css`) with light/dark support.
 - Configurable, per-snippet-overridable iframe `sandbox`.
 - Self-hosted SVG favicon.
-- First snippet: `r34-rechner` — the R34 GT-T planning calculator.
+- First snippet: `r34-rechner`, the R34 GT-T planning calculator.
 - `_template` starter snippet.
 - README, architecture documentation, and this changelog.
