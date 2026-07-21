@@ -1,0 +1,53 @@
+/*
+ * Design tokens — the only theme system. Components reference these variables;
+ * they never hardcode a hex value, spacing, or radius. Light values are the
+ * default; dark overrides follow the OS preference.
+ */
+:root {
+  --accent: #534ab7;
+  --accent-contrast: #ffffff;
+
+  --surface-0: #faf9f6;
+  --surface-1: #ffffff;
+  --surface-2: #f2f1ec;
+  --border: #e6e4dc;
+
+  --text: #1c1b19;
+  --text-muted: #6b6a63;
+  --text-faint: #96948b;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.125rem;
+
+  --sidebar-width: 272px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent: #afa9ec;
+    --accent-contrast: #17171a;
+
+    --surface-0: #161619;
+    --surface-1: #1f1f22;
+    --surface-2: #26262a;
+    --border: #2f2f33;
+
+    --text: #f2f1ee;
+    --text-muted: #b7b5ab;
+    --text-faint: #84837b;
+  }
+}

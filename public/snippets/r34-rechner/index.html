@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R34 Planungsrechner</title>
+<style>
+  :root{
+    --bg:#faf9f6; --card:#ffffff; --line:#e6e4dc; --track:#efeee8; --field:#fbfaf7;
+    --ink:#1c1b19; --ink2:#6b6a63; --ink3:#96948b;
+    --acc:#534AB7; --acc-soft:#eeedfe; --acc-bar:#7F77DD;
+    --ok:#0f6e56; --ok-bg:#e1f5ee; --warn:#854f0b; --warn-bg:#faeeda; --bad:#a32d2d; --bad-bg:#fcebeb;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#17171a; --card:#1f1f22; --line:#2f2f33; --track:#2a2a2e; --field:#26262a;
+      --ink:#f2f1ee; --ink2:#b7b5ab; --ink3:#84837b;
+      --acc:#AFA9EC; --acc-soft:#2a2545; --acc-bar:#7F77DD;
+      --ok:#5dcaa5; --ok-bg:#0f3b30; --warn:#f0c072; --warn-bg:#3d2f12; --bad:#f09595; --bad-bg:#3d1717;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; line-height:1.5; padding:28px 18px 44px;}
+  .wrap{max-width:820px; margin:0 auto;}
+  h1{font-size:20px; font-weight:600; margin:0 0 2px;}
+  .sub{font-size:13px; color:var(--ink2); margin:0 0 24px;}
+
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-bottom:18px;}
+  .ptitle{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink2); margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;}
+  .reset{font-size:12px; text-transform:none; letter-spacing:0; color:var(--acc); cursor:pointer; font-weight:600;}
+  .reset:hover{text-decoration:underline;}
+
+  .subhead{font-size:13px; font-weight:600; color:var(--ink); margin:18px 0 12px; padding-top:14px; border-top:1px solid var(--line);}
+  .subhead:first-of-type{border-top:none; padding-top:0; margin-top:14px;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px;}
+  .fld{display:flex; flex-direction:column; gap:6px;}
+  .fld-wide{grid-column:1 / -1;}
+  .flab{font-size:12px; color:var(--ink2);}
+  .finp{display:flex; align-items:center; background:var(--field); border:1px solid var(--line); border-radius:8px; overflow:hidden;}
+  .finp input{flex:1; width:100%; border:none; background:transparent; color:var(--ink); font-family:inherit; font-size:15px; font-weight:600; padding:9px 10px; outline:none; -moz-appearance:textfield;}
+  .finp input::-webkit-outer-spin-button,.finp input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+  .finp:focus-within{border-color:var(--acc);}
+  .unit{font-size:12px; color:var(--ink3); padding:0 10px 0 4px; white-space:nowrap;}
+  .derived{margin-top:11px; font-size:12px; color:var(--acc); background:var(--acc-soft); border-radius:8px; padding:9px 11px; line-height:1.6;}
+  .derived .warn{display:block; margin-top:5px; color:var(--warn);}
+
+  .seg{display:flex; gap:6px; flex-wrap:wrap;}
+  .seg button{flex:1; min-width:100px; padding:9px 10px; font-size:13px; font-family:inherit; color:var(--ink2);
+    background:transparent; border:1px solid var(--line); border-radius:8px; cursor:pointer; transition:all .12s;}
+  .seg button:hover{border-color:var(--acc);}
+  .seg button.on{background:var(--acc-soft); border-color:var(--acc); color:var(--acc); font-weight:600;}
+  .seg.mini button{padding:8px 8px; font-size:12px; min-width:70px;}
+
+  .ctrl{margin-bottom:18px;}
+  .ctrl:last-child{margin-bottom:0;}
+  .clab{font-size:13px; color:var(--ink2); margin-bottom:9px; display:flex; justify-content:space-between; align-items:baseline;}
+  .cval{font-weight:600; color:var(--ink); font-size:14px;}
+  input[type=range]{-webkit-appearance:none; width:100%; height:4px; background:var(--track); border-radius:2px; outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--acc); cursor:pointer; border:none;}
+  input[type=range]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:var(--acc); cursor:pointer; border:none;}
+
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:20px 0 18px;}
+  .mc{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px;}
+  .mc .k{font-size:12px; color:var(--ink2);}
+  .mc .v{font-size:22px; font-weight:600; margin-top:4px; letter-spacing:-.01em;}
+  .mc .v small{font-size:13px; font-weight:400; color:var(--ink2);}
+  .mc .x{font-size:12px; color:var(--ink3); margin-top:3px;}
+  .pill{display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; margin-top:6px;}
+  .pill.ok{background:var(--ok-bg); color:var(--ok);}
+  .pill.warn{background:var(--warn-bg); color:var(--warn);}
+  .pill.bad{background:var(--bad-bg); color:var(--bad);}
+
+  .tl-wrap{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px 22px 18px;}
+  .tl-title{font-size:12px; color:var(--ink2); margin-bottom:24px;}
+  .tl{position:relative; height:96px;}
+  .tl-line{position:absolute; top:48px; left:0; right:0; height:2px; background:var(--line);}
+  .tl-fill{position:absolute; top:48px; left:0; height:2px; background:var(--acc-bar);}
+  .mk{position:absolute; top:42px; transform:translateX(-50%);}
+  .mk .dot{width:13px; height:13px; border-radius:50%; background:var(--bg); border:2px solid var(--ink3);}
+  .mk.hi .dot{width:15px; height:15px; margin-top:-1px; background:var(--acc-bar); border-color:var(--acc-bar);}
+  .mk .lbl{position:absolute; left:50%; transform:translateX(-50%); white-space:nowrap; text-align:center; font-size:11px;}
+  .mk .lbl .d{font-weight:600; color:var(--ink);}
+  .mk .lbl .t{color:var(--ink2);}
+  .mk.up .lbl{bottom:22px;}
+  .mk.down .lbl{top:22px;}
+  .mk.hi .lbl .d,.mk.hi .lbl .t{color:var(--acc);}
+
+  .note{font-size:12px; color:var(--ink3); margin-top:20px; line-height:1.7;}
+  .note b{color:var(--ink2); font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Skyline R34 — Planungsrechner</h1>
+  <p class="sub">Alle Felder editierbar, voreingestellt mit deinen echten Zahlen. Versicherung, Steuer und Sprit sind jetzt einzeln einstellbar — für den R34 mit den Tarif-Varianten, die wir besprochen haben.</p>
+
+  <div class="panel">
+    <div class="ptitle"><span>Deine Zahlen</span><span class="reset" id="reset">↺ zurücksetzen</span></div>
+    <div id="inputs"></div>
+  </div>
+
+  <div class="panel">
+    <div class="ptitle"><span>Szenario</span></div>
+    <div class="ctrl">
+      <div class="clab"><span>Startkapital heute</span><span class="cval" id="cap-val">0 €</span></div>
+      <input type="range" id="cap" min="0" max="25000" step="500" value="0">
+    </div>
+    <div class="ctrl">
+      <div class="clab"><span>Daily-Strategie</span></div>
+      <div class="seg" id="strat">
+        <button data-v="dailyfirst" class="on">Daily zuerst</button>
+        <button data-v="r34first">R34 zuerst · Transit bis Kauf</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="clab"><span>R34 kaufen</span></div>
+      <div class="seg" id="method">
+        <button data-v="cash" class="on">Bar</button>
+        <button data-v="fin2">Finanziert · 2 Jahre</button>
+        <button data-v="fin3">Finanziert · 3 Jahre</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="clab"><span>R34-Kauf / Finanzierungsstart ab</span><span class="cval" id="start-val">06/2028</span></div>
+      <input type="range" id="start" min="0" max="66" step="1" value="23">
+    </div>
+    <div class="ctrl">
+      <div class="clab"><span>Angenommene Wertsteigerung des GT-T</span><span class="cval" id="appr-val">5 % / Jahr</span></div>
+      <input type="range" id="appr" min="0" max="12" step="1" value="5">
+    </div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="tl-wrap">
+    <div class="tl-title">Zeitleiste</div>
+    <div class="tl" id="tl"></div>
+  </div>
+
+  <p class="note">
+    <b>Fix im Modell:</b> Führerschein wahlweise „noch zu machen" (Kosten + Termin 11/2026) oder „bereits vorhanden" (dann ab wann) · Kauf-/Finanzierungsstart frei wählbar — vor 06/2028 ohne H-Kennzeichen (Kfz-Steuer 527 €/J statt 192, keine Klassiker-Tarife), ab 06/2028 mit H · Anzahlung = dein bis dahin Erspartes, Rest über die gewählte Laufzeit; die Rate läuft im Kapitalverlauf mit · Guthaben verzinst sich monatlich zum Tagesgeldzins · „Daily zuerst" kauft, sobald leistbar (frühestens ab Führerschein), spätestens 05/2027; bei „R34 zuerst" folgt der Daily erst, wenn er die Rücklage nicht antastet.
+    Saison 03–10 rechnet Versicherung ×0,70 und Steuer anteilig (8/12); Garage läuft ganzjährig. Versicherungsfelder = Beitrag auf „erfahren"-Niveau; der SF-Start-Zuschlag (Fahranfänger ×2,3, schmilzt über ~5 schadenfreie Jahre auf ×1,0 · Zweitwagen ×1,3 über ~3) kommt obendrauf. „Automatisch" setzt den SF-Start aus der Strategie: erstes Auto = Fahranfänger, zweites = Zweitwagen. Liebhaber ist SF-frei und pauschal (800 €/J), geht erst ab deinem 25. (04/2029) und setzt Garage + Zustandsnote voraus — „ab 25 wechseln" rechnet den Umstieg automatisch ein. „Frei nach Kauf" = engster Monat ab R34-Kauf. Alle Beträge editierbar — mit echten Angeboten überschreiben.
+  </p>
+</div>
+
+<script>
+"use strict";
+
+const GROUPS = [
+  { title:'Einkommen & Kosten', fields:[
+    {key:'netNow',     label:'Netto jetzt',            unit:'€/M', def:1903},
+    {key:'netAfter',   label:'Netto ab Erhöhung',      unit:'€/M', def:2246},
+    {key:'raiseMonth', label:'Erhöhung in … Monaten',  unit:'Mon', def:12},
+    {key:'fix',        label:'Fixkosten (Wohnen etc.)',unit:'€/M', def:750},
+    {key:'varc',       label:'Variable Kosten',        unit:'€/M', def:200},
+  ]},
+  { title:'Führerschein', fields:[
+    {type:'toggle', key:'licenseOwned', label:'Status', onLabel:'bereits vorhanden', offLabel:'noch zu machen', def:false},
+    {type:'month', key:'licenseSince', label:'Führerschein seit', def:'2024-04', showIf:'licenseOwned'},
+    {key:'licence', label:'Kosten Führerschein', unit:'€', def:3500, hideIf:'licenseOwned'},
+  ]},
+  { title:'Einmalkosten', fields:[
+    {key:'reserve',    label:'Rücklage (bar)',         unit:'€',   def:4000},
+  ]},
+  { title:'R34 · Wochenendauto', derived:'r34', fields:[
+    {key:'car',      label:'Preis heute',              unit:'€',    def:28500},
+    {type:'seg', key:'r34Ins', target:'r34InsY', label:'Versicherungsart', def:'Vollkasko', opts:[
+      {v:'Liebhaber', p:800}, {v:'Haftpfl.+TK', p:1540}, {v:'Vollkasko', p:3800},
+    ]},
+    {key:'r34InsY',  label:'Versicherung',             unit:'€/J',  def:3800},
+    {type:'seg', key:'r34Sf', label:'SF-Start (nur HP/VK)', def:'Automatisch', opts:[
+      {v:'Automatisch'}, {v:'Fahranfänger'}, {v:'Zweitwagen'}, {v:'Erfahren'},
+    ]},
+    {type:'toggle', key:'r34Switch25', label:'Ab 25 (04/2029)', onLabel:'auf Liebhaber wechseln', offLabel:'Variante behalten', def:true, showWhen: s => s.r34Ins !== 'Liebhaber'},
+    {type:'toggle', key:'r34Season', label:'Zulassung', onLabel:'Saison 03–10', offLabel:'ganzjährig', def:true},
+    {key:'r34Tax',   label:'Kfz-Steuer (H)',           unit:'€/J',  def:192},
+    {key:'r34Maint', label:'Wartung / Rücklage',       unit:'€/J',  def:1200},
+    {key:'r34Garage',label:'Garage / Stellplatz',      unit:'€/M',  def:60},
+    {key:'r34Km',    label:'Fahrleistung',             unit:'km/J', def:5000},
+    {key:'r34Cons',  label:'Verbrauch',                unit:'l/100',def:11},
+    {key:'r34Price', label:'Spritpreis',               unit:'€/l',  def:2.00},
+  ]},
+  { title:'Daily', derived:'daily', fields:[
+    {key:'dailyPrice', label:'Preis',                  unit:'€',    def:2000},
+    {key:'dailyInsY',  label:'Versicherung',           unit:'€/J',  def:600},
+    {type:'seg', key:'dailySf', label:'SF-Start Daily', def:'Automatisch', opts:[
+      {v:'Automatisch'}, {v:'Fahranfänger'}, {v:'Zweitwagen'}, {v:'Erfahren'},
+    ]},
+    {key:'dailyTax',   label:'Kfz-Steuer',             unit:'€/J',  def:120},
+    {key:'dailyMaint', label:'Wartung',                unit:'€/J',  def:600},
+    {key:'dailyKm',    label:'Fahrleistung',           unit:'km/J', def:10000},
+    {key:'dailyCons',  label:'Verbrauch',              unit:'l/100',def:6.5},
+    {key:'dailyPriceL',label:'Spritpreis',             unit:'€/l',  def:1.75},
+  ]},
+  { title:'Zinsen', fields:[
+    {key:'rate',       label:'Kreditzins',             unit:'%',    def:7},
+    {key:'saveRate',   label:'Tagesgeldzins (Guthaben)',unit:'%',   def:2.5},
+  ]},
+];
+const ALLFIELDS = GROUPS.flatMap(g => g.fields);
+
+const state = { cap:0, appr:5, startMonth:23, strat:'dailyfirst', method:'cash' };
+
+const annuity = (P,years,eff) => { if(P<=0) return 0; const n=years*12, r=eff/12; return r===0 ? P/n : P*r/(1-Math.pow(1+r,-n)); };
+const eur = n => Math.round(n).toLocaleString('de-DE');
+const dat = m => { if(m==null||!isFinite(m)) return '—'; const mm=(6+m)%12+1, yy=2026+Math.floor((6+m)/12); return String(mm).padStart(2,'0')+'/'+yy; };
+const HMONTH = 23;    // 06/2028 (1998er wird 30)
+const AGE25  = 33;    // 04/2029 (25. Geburtstag)
+const LICENCE_MONTH = 4; // 11/2026, falls Führerschein noch gemacht wird
+const EURO0_TAX = 527;             // Kfz-Steuer 2.5l Euro-0 ohne H-Kennzeichen
+const LIEBHABER_Y = 800;           // Liebhaber-Pauschale ab 25 (€/Jahr)
+const LIEBHABER_FALLBACK_Y = 1540; // bis 25 statt Liebhaber: Haftpfl.+TK
+const SF_CURVES = {                // Zuschlag auf den „erfahren"-Beitrag, je Haltejahr
+  'Fahranfänger': [2.3, 1.8, 1.5, 1.3, 1.15],
+  'Zweitwagen':   [1.3, 1.2, 1.1],
+  'Erfahren':     [1.0],
+};
+const sfAt = (level, years) => {
+  const c = SF_CURVES[level] ?? [1];
+  const y = Math.max(0, years);
+  return y < c.length ? c[y] : 1.0;
+};
+const monthIndexFrom = (ym) => {
+  if (typeof ym !== 'string') return 0;
+  const [y, m] = ym.split('-').map(Number);
+  return (!y || !m) ? 0 : (y - 2026) * 12 + (m - 7); // Monat 0 = 07/2026
+};
+const licenseMonth = (s) => (s.licenseOwned ? monthIndexFrom(s.licenseSince) : LICENCE_MONTH);
+const fuelM = (km, cons, price) => km * cons/100 * price / 12;
+
+const resolveSf = (s, which) => {
+  const sel = which === 'r34' ? s.r34Sf : s.dailySf;
+  if(sel !== 'Automatisch') return sel;
+  const firstCar = s.strat === 'dailyfirst' ? 'daily' : 'r34';
+  return which === firstCar ? 'Fahranfänger' : 'Zweitwagen';
+};
+const r34InsMonthlyAt = (s, m, years) => {
+  const season = s.r34Season ? 0.70 : 1.0;
+  if(m >= AGE25 && (s.r34Ins === 'Liebhaber' || s.r34Switch25)) return LIEBHABER_Y * season / 12;
+  const baseY = s.r34Ins === 'Liebhaber' ? LIEBHABER_FALLBACK_Y : s.r34InsY;
+  return baseY * season * sfAt(resolveSf(s, 'r34'), years) / 12;
+};
+const r34TaxMonthlyAt = (s, m) => (m >= HMONTH ? s.r34Tax : EURO0_TAX) * (s.r34Season ? 8/12 : 1.0) / 12;
+const r34RunAt = (s, m, years) => r34InsMonthlyAt(s, m, years) + r34TaxMonthlyAt(s, m) + s.r34Maint/12 + (s.r34Garage ?? 0) + fuelM(s.r34Km, s.r34Cons, s.r34Price);
+const dailyInsMonthlyAt = (s, years) => s.dailyInsY * sfAt(resolveSf(s, 'daily'), years) / 12;
+const dailyRunAt = (s, years) => dailyInsMonthlyAt(s, years) + (s.dailyTax + s.dailyMaint)/12 + fuelM(s.dailyKm, s.dailyCons, s.dailyPriceL);
+
+function simulate(s){
+  const OUT = s.fix + s.varc;
+  const dailyFirst = s.strat === 'dailyfirst';
+  const finance = s.method !== 'cash';
+  const term = s.method === 'fin2' ? 2 : 3;
+  const raiseM = Math.max(0, Math.round(s.raiseMonth));
+  const dailyStart = Math.max(0, licenseMonth(s));               // frühestens ab Führerschein
+  const startM = Math.max(0, licenseMonth(s), Math.round(s.startMonth ?? HMONTH));
+  const net = m => m < raiseM ? s.netNow : s.netAfter;
+  const yrs = (buy, m) => Math.floor((m - buy) / 12);
+
+  let cap = s.cap, dailyMonth = null, r34Month = null;
+  let financed = 0, payment = 0, interest = 0, priceAtBuy = 0;
+  let leftoverMin = null;
+
+  for(let m=0; m<400; m++){
+    if(cap > 0) cap += cap * (s.saveRate ?? 0) / 100 / 12;
+    let cost = OUT;
+    if(dailyMonth != null) cost += dailyRunAt(s, yrs(dailyMonth, m));
+    if(r34Month != null){
+      cost += r34RunAt(s, m, yrs(r34Month, m));
+      if(finance && m < r34Month + term*12) cost += payment;
+    }
+    cap += net(m) - cost;
+    if(r34Month != null){
+      const flow = net(m) - cost;
+      if(leftoverMin == null || flow < leftoverMin) leftoverMin = flow;
+    }
+    if(!s.licenseOwned && m === LICENCE_MONTH) cap -= s.licence;
+
+    if(dailyFirst && dailyMonth == null && m >= dailyStart && (cap >= s.dailyPrice || m >= Math.max(10, dailyStart))){
+      cap -= s.dailyPrice; dailyMonth = m;
+    }
+    if(!dailyFirst && dailyMonth == null && r34Month != null && m > r34Month && cap - s.dailyPrice >= s.reserve){
+      cap -= s.dailyPrice; dailyMonth = m;
+    }
+
+    if(r34Month != null) continue;
+    const price = s.car * Math.pow(1 + s.appr/100, m/12);
+    if(m < startM) continue;
+
+    if(finance){
+      priceAtBuy = price;
+      const deposit = Math.max(0, cap - s.reserve);
+      financed = Math.max(0, price - deposit);
+      cap -= Math.min(deposit, price);
+      payment = annuity(financed, term, s.rate/100);
+      interest = payment * term * 12 - financed;
+      r34Month = m;
+    } else if(cap >= price + s.reserve){
+      priceAtBuy = price; cap -= price; r34Month = m;
+    }
+  }
+
+  const bothMonth = dailyFirst ? r34Month : dailyMonth;
+
+  // Langfristig: SF abgeschmolzen, ggf. Liebhaber, Kredit getilgt, beide Autos laufen.
+  let leftoverLong = null;
+  if(r34Month != null){
+    const mL = Math.max(r34Month, AGE25, HMONTH) + 120;
+    leftoverLong = s.netAfter - OUT - dailyRunAt(s, 99) - r34RunAt(s, mL, 99);
+  }
+
+  return {r34Month, bothMonth, financed, payment, interest, leftover: leftoverMin, leftoverLong, priceAtBuy, finance, term, dailyFirst, dailyMonth};
+}
+
+function statusOf(v){
+  if(v >= 400) return {w:'komfortabel', c:'ok'};
+  if(v >= 200) return {w:'solide', c:'ok'};
+  if(v >= 100) return {w:'eng', c:'warn'};
+  return {w:'kritisch', c:'bad'};
+}
+
+function renderDerived(s, r){
+  const mBuy = r.r34Month ?? Math.max(0, Math.round(s.startMonth ?? HMONTH));
+  const mLong = Math.max(mBuy, AGE25, HMONTH) + 120;
+  const i0 = r34InsMonthlyAt(s, mBuy, 0), iL = r34InsMonthlyAt(s, mLong, 99);
+  const rf = fuelM(s.r34Km, s.r34Cons, s.r34Price);
+  const u0 = r34RunAt(s, mBuy, 0), uL = r34RunAt(s, mLong, 99);
+  let txt = `Vers. Jahr 1 ≈ ${eur(i0)} €/M → langfristig ≈ ${eur(iL)} €/M · Sprit ≈ ${eur(rf)} €/M · <b>Unterhalt ${eur(u0)} → ${eur(uL)} €/M</b>`;
+  const warns = [];
+  if(mBuy < HMONTH) warns.push(`Kauf vor 06/2028: kein H-Kennzeichen — Kfz-Steuer ${EURO0_TAX} €/J bis 05/2028, keine Klassiker-Tarife`);
+  if(s.r34Ins === 'Liebhaber'){
+    if(mBuy < AGE25) warns.push('Liebhaber erst ab deinem 25. (04/2029) — bis dahin mit Haftpfl.+TK (1.540 €/J + SF) gerechnet');
+    warns.push('setzt Garage + Zustandsnote 1–3 voraus · SF entfällt (Pauschaltarif)');
+  } else {
+    if(s.r34Switch25 && mBuy < AGE25) warns.push('ab 04/2029 auf Liebhaber (800 €/J) gewechselt — im Langfrist-Wert enthalten');
+    const lvl = resolveSf(s, 'r34');
+    warns.push(`SF-Start R34: ${lvl}${s.r34Sf === 'Automatisch' ? ' (automatisch nach Strategie)' : ''} · Zuschlag schmilzt pro schadenfreiem Jahr`);
+  }
+  document.getElementById('der_r34').innerHTML = txt + (warns.length ? `<span class="warn">⚠ ${warns.join(' · ')}</span>` : '');
+
+  const df = fuelM(s.dailyKm, s.dailyCons, s.dailyPriceL);
+  const d0 = dailyRunAt(s, 0), dL = dailyRunAt(s, 99);
+  document.getElementById('der_daily').innerHTML =
+    `Vers. Jahr 1 ≈ ${eur(dailyInsMonthlyAt(s, 0))} €/M → langfristig ≈ ${eur(dailyInsMonthlyAt(s, 99))} €/M · Sprit ≈ ${eur(df)} €/M · <b>Unterhalt ${eur(d0)} → ${eur(dL)} €/M</b> · SF-Start: ${resolveSf(s, 'daily')}${s.dailySf === 'Automatisch' ? ' (auto)' : ''}`;
+}
+
+function renderCards(r){
+  const st = statusOf(r.leftover ?? -1);
+  const finCard = r.financed > 0
+    ? `<div class="v">${eur(r.financed)} <small>€</small></div><div class="x">${eur(r.interest)} € Zinsen · ${eur(r.payment)} €/M</div>`
+    : `<div class="v">Barkauf</div><div class="x">kein Kredit nötig</div>`;
+  const dInit = state.car || 28500;
+  const apprDelta = r.priceAtBuy > dInit + 50 ? `<div class="x">+${eur(r.priceAtBuy - dInit)} € ggü. heute</div>` : `<div class="x">wie heute</div>`;
+  document.getElementById('cards').innerHTML = `
+    <div class="mc"><div class="k">R34 im Besitz</div><div class="v">${dat(r.r34Month)}</div></div>
+    <div class="mc"><div class="k">Beide Autos</div><div class="v">${dat(r.bothMonth)}</div></div>
+    <div class="mc"><div class="k">Finanzierung</div>${finCard}</div>
+    <div class="mc"><div class="k">Frei nach Kauf</div><div class="v">${r.leftover == null ? '—' : eur(r.leftover)} <small>€/M</small></div><span class="pill ${st.c}">${st.w}</span><div class="x">${r.leftoverLong == null ? '' : 'langfristig ≈ ' + eur(r.leftoverLong) + ' €/M'}</div></div>
+    <div class="mc"><div class="k">R34-Preis bei Kauf</div><div class="v">${eur(r.priceAtBuy)} <small>€</small></div>${apprDelta}</div>`;
+}
+
+function renderTimeline(r){
+  const ev = [];
+  if(!state.licenseOwned) ev.push({m:LICENCE_MONTH, d:'Führerschein'});
+  if(r.dailyFirst && r.dailyMonth != null) ev.push({m:r.dailyMonth, d:'Daily'});
+  if(r.r34Month != null) ev.push({m:r.r34Month, d:'R34 gekauft', hi:true});
+  if(r.bothMonth != null && r.bothMonth !== r.r34Month) ev.push({m:r.bothMonth, d:'Beide Autos'});
+  if(r.finance && r.r34Month != null) ev.push({m:r.r34Month + r.term*12, d:'Kredit getilgt'});
+  if(r.r34Month != null && r.r34Month < HMONTH) ev.push({m:HMONTH, d:'H-Kennzeichen'});
+  if(r.r34Month != null && r.r34Month < AGE25 && (state.r34Ins === 'Liebhaber' || state.r34Switch25)) ev.push({m:AGE25, d:'Liebhaber-Tarif'});
+  ev.sort((a,b)=>a.m-b.m);
+
+  if(!ev.length || r.r34Month == null){ document.getElementById('tl').innerHTML = '<div class="tl-line"></div>'; return; }
+  const end = Math.max(...ev.map(e=>e.m)) + 4;
+  const r34x = (r.r34Month / end) * 100;
+  let html = `<div class="tl-line"></div><div class="tl-fill" style="width:${r34x}%"></div>`;
+  ev.forEach((e,i)=>{
+    const x = Math.min(100, (e.m/end)*100);
+    const pos = i % 2 === 0 ? 'up' : 'down';
+    html += `<div class="mk ${pos} ${e.hi?'hi':''}" style="left:${x}%"><div class="dot"></div><div class="lbl"><div class="d">${dat(e.m)}</div><div class="t">${e.d}</div></div></div>`;
+  });
+  document.getElementById('tl').innerHTML = html;
+}
+
+function applyVisibility(s){
+  ALLFIELDS.forEach(f => {
+    if(!f.showIf && !f.hideIf && !f.showWhen) return;
+    const el = document.getElementById('fld_'+f.key);
+    if(!el) return;
+    const visible = (f.showIf ? !!s[f.showIf] : true) && (f.hideIf ? !s[f.hideIf] : true) && (f.showWhen ? !!f.showWhen(s) : true);
+    el.style.display = visible ? '' : 'none';
+  });
+}
+
+function render(){
+  applyVisibility(state);
+  const r = simulate(state);
+  renderDerived(state, r);
+  renderCards(r);
+  renderTimeline(r);
+}
+
+// ---- render one field to HTML ----
+function fieldHTML(f){
+  if(f.type === 'seg'){
+    const btns = f.opts.map(o => `<button data-v="${o.v}" data-p="${o.p ?? ''}" class="${o.v===f.def?'on':''}">${o.v}</button>`).join('');
+    return `<div class="fld fld-wide" id="fld_${f.key}"><span class="flab">${f.label}</span><div class="seg mini" id="seg_${f.key}">${btns}</div></div>`;
+  }
+  if(f.type === 'toggle'){
+    return `<div class="fld fld-wide" id="fld_${f.key}"><span class="flab">${f.label}</span><div class="seg mini" id="seg_${f.key}">
+      <button data-v="on" class="${f.def?'on':''}">${f.onLabel}</button>
+      <button data-v="off" class="${!f.def?'on':''}">${f.offLabel}</button></div></div>`;
+  }
+  if(f.type === 'month'){
+    return `<label class="fld" id="fld_${f.key}"><span class="flab">${f.label}</span><span class="finp"><input type="month" id="f_${f.key}" value="${f.def}"></span></label>`;
+  }
+  return `<label class="fld" id="fld_${f.key}"><span class="flab">${f.label}</span><span class="finp"><input type="number" id="f_${f.key}" value="${f.def}" step="any"><span class="unit">${f.unit}</span></span></label>`;
+}
+
+// ---- build grouped fields ----
+document.getElementById('inputs').innerHTML = GROUPS.map(g => {
+  const fields = g.fields.map(fieldHTML).join('');
+  const der = g.derived ? `<div class="derived" id="der_${g.derived}"></div>` : '';
+  return `<div class="subhead">${g.title}</div><div class="grid">${fields}</div>${der}`;
+}).join('');
+
+function setSeg(id, val){
+  const box = document.getElementById(id);
+  if(box) [...box.children].forEach(c => c.classList.toggle('on', c.dataset.v === val));
+}
+
+// ---- wire every field ----
+ALLFIELDS.forEach(f => {
+  if(f.type === 'seg'){
+    state[f.key] = f.def;
+    document.getElementById('seg_'+f.key).addEventListener('click', e => {
+      const b = e.target.closest('button'); if(!b) return;
+      setSeg('seg_'+f.key, b.dataset.v);
+      state[f.key] = b.dataset.v;
+      if(f.target){
+        const p = parseFloat(b.dataset.p);
+        state[f.target] = p;
+        const inp = document.getElementById('f_'+f.target); if(inp) inp.value = p;
+      }
+      render();
+    });
+  } else if(f.type === 'toggle'){
+    state[f.key] = f.def;
+    document.getElementById('seg_'+f.key).addEventListener('click', e => {
+      const b = e.target.closest('button'); if(!b) return;
+      setSeg('seg_'+f.key, b.dataset.v);
+      state[f.key] = (b.dataset.v === 'on');
+      render();
+    });
+  } else if(f.type === 'month'){
+    state[f.key] = f.def;
+    document.getElementById('f_'+f.key).addEventListener('input', e => {
+      state[f.key] = e.target.value;
+      render();
+    });
+  } else {
+    state[f.key] = f.def;
+    document.getElementById('f_'+f.key).addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      state[f.key] = isNaN(v) ? 0 : v;
+      render();
+    });
+  }
+});
+
+// ---- sliders ----
+const capEl = document.getElementById('cap');
+capEl.addEventListener('input', () => { state.cap = +capEl.value; document.getElementById('cap-val').textContent = eur(state.cap)+' €'; render(); });
+const apprEl = document.getElementById('appr');
+apprEl.addEventListener('input', () => { state.appr = +apprEl.value; document.getElementById('appr-val').textContent = state.appr+' % / Jahr'; render(); });
+const startEl = document.getElementById('start');
+startEl.addEventListener('input', () => {
+  const v = +startEl.value;
+  state.startMonth = v;
+  document.getElementById('start-val').textContent = dat(v) + (v < HMONTH ? ' · vor H!' : '');
+  render();
+});
+
+// ---- scenario toggles ----
+function wireSeg(id, key){
+  document.getElementById(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if(!b) return;
+    setSeg(id, b.dataset.v); state[key] = b.dataset.v; render();
+  });
+}
+wireSeg('strat','strat'); wireSeg('method','method');
+
+// ---- reset ----
+document.getElementById('reset').addEventListener('click', () => {
+  ALLFIELDS.forEach(f => {
+    state[f.key] = f.def;
+    if(f.type === 'seg'){
+      setSeg('seg_'+f.key, f.def);
+      if(f.target){ const o = f.opts.find(x => x.v === f.def); if(o){ state[f.target] = o.p; const inp = document.getElementById('f_'+f.target); if(inp) inp.value = o.p; } }
+    } else if(f.type === 'toggle'){
+      setSeg('seg_'+f.key, f.def ? 'on' : 'off');
+    } else {
+      const inp = document.getElementById('f_'+f.key); if(inp) inp.value = f.def;
+    }
+  });
+  state.cap = 0; capEl.value = 0; document.getElementById('cap-val').textContent = '0 €';
+  state.appr = 5; apprEl.value = 5; document.getElementById('appr-val').textContent = '5 % / Jahr';
+  state.startMonth = 23; startEl.value = 23; document.getElementById('start-val').textContent = dat(23);
+  state.strat = 'dailyfirst'; setSeg('strat','dailyfirst');
+  state.method = 'cash'; setSeg('method','cash');
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

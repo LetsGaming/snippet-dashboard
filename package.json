@@ -1,0 +1,26 @@
+{
+  "name": "snippet-dashboard",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal Vue wrapper that lists and renders independent, self-contained HTML snippets.",
+  "scripts": {
+    "snippets:manifest": "node scripts/generate-manifest.mjs",
+    "predev": "npm run snippets:manifest",
+    "dev": "vite",
+    "prebuild": "npm run snippets:manifest",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vue-tsc": "^2.1.10"
+  }
+}

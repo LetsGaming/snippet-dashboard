@@ -1,0 +1,6 @@
+{
+  "title": "Snippet-Titel",
+  "description": "Kurze Beschreibung, erscheint in der Sidebar.",
+  "tags": ["beispiel"],
+  "order": 100
+}
