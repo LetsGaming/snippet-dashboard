@@ -1,0 +1,6 @@
+{
+  "title": "Distro Match",
+  "description": "Interaktives Quiz um die eigene Linux-Distribution zu finden.",
+  "tags": ["linux", "quiz", "distro"],
+  "order": 1
+}
