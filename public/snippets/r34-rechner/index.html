@@ -1,741 +1,200 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>R34 Planungsrechner</title>
-<style>
-  :root{
-    --bg:#faf9f6; --card:#ffffff; --line:#e6e4dc; --track:#efeee8; --field:#fbfaf7;
-    --ink:#1c1b19; --ink2:#6b6a63; --ink3:#96948b;
-    --acc:#534AB7; --acc-soft:#eeedfe; --acc-bar:#7F77DD;
-    --ok:#0f6e56; --ok-bg:#e1f5ee; --warn:#854f0b; --warn-bg:#faeeda; --bad:#a32d2d; --bad-bg:#fcebeb;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --bg:#17171a; --card:#1f1f22; --line:#2f2f33; --track:#2a2a2e; --field:#26262a;
-      --ink:#f2f1ee; --ink2:#b7b5ab; --ink3:#84837b;
-      --acc:#AFA9EC; --acc-soft:#2a2545; --acc-bar:#7F77DD;
-      --ok:#5dcaa5; --ok-bg:#0f3b30; --warn:#f0c072; --warn-bg:#3d2f12; --bad:#f09595; --bad-bg:#3d1717;
-    }
-  }
-  *{box-sizing:border-box;}
-  body{margin:0; background:var(--bg); color:var(--ink);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    -webkit-font-smoothing:antialiased; line-height:1.5; padding:28px 18px 44px;}
-  .wrap{max-width:860px; margin:0 auto;}
-  h1{font-size:20px; font-weight:600; margin:0 0 2px;}
-  .sub{font-size:13px; color:var(--ink2); margin:0 0 24px;}
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>R34 Planungsrechner</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Wann kann ich mir den R34 leisten?</h1>
 
-  .panel{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 20px; margin-bottom:18px;}
-  .ptitle{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink2); margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;}
-  .reset{font-size:12px; text-transform:none; letter-spacing:0; color:var(--acc); cursor:pointer; font-weight:600;}
-  .reset:hover{text-decoration:underline;}
+      <div class="hero" id="hero"></div>
 
-  /* ---- einklappbare Gruppen ---- */
-  details.grp{border-top:1px solid var(--line);}
-  details.grp:first-of-type{border-top:none;}
-  details.grp > summary{list-style:none; cursor:pointer; padding:13px 0 11px; display:flex; align-items:baseline; gap:9px;}
-  details.grp > summary::-webkit-details-marker{display:none;}
-  details.grp > summary::before{content:'▸'; color:var(--ink3); font-size:11px; transition:transform .15s; display:inline-block;}
-  details.grp[open] > summary::before{transform:rotate(90deg);}
-  .gname{font-size:13px; font-weight:600;}
-  .gsum{font-size:12px; color:var(--ink3); margin-left:auto; text-align:right;}
-  .gbody{padding:2px 0 16px;}
+      <div class="panel">
+        <div class="ptitle">
+          <span>Deine Zahlen</span>
+          <button type="button" class="act" id="reset">↺ zurücksetzen</button>
+        </div>
+        <div class="grid" id="core"></div>
 
-  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:14px;}
-  .fld{display:flex; flex-direction:column; gap:6px; min-width:0;}
-  .fld-wide{grid-column:1 / -1;}
-  .flab{font-size:12px; color:var(--ink2); display:flex; align-items:center; gap:5px;}
-  .finp{display:flex; align-items:center; background:var(--field); border:1px solid var(--line); border-radius:8px; overflow:hidden;}
-  .finp input{flex:1; width:100%; min-width:0; border:none; background:transparent; color:var(--ink); font-family:inherit; font-size:15px; font-weight:600; padding:9px 10px; outline:none; -moz-appearance:textfield;}
-  .finp input::-webkit-outer-spin-button,.finp input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
-  .finp:focus-within{border-color:var(--acc);}
-  .unit{font-size:12px; color:var(--ink3); padding:0 10px 0 4px; white-space:nowrap;}
+        <div class="ctrl" style="margin-top: 18px">
+          <div class="clab">
+            <span
+              class="tip"
+              data-tip="Was du heute schon auf der hohen Kante hast."
+              >Startkapital heute<button
+                type="button"
+                class="hbtn"
+                data-help="cap"
+              >
+                ?
+              </button></span
+            >
+            <span class="cval" id="cap-val">0 €</span>
+          </div>
+          <input
+            type="range"
+            id="cap"
+            min="0"
+            max="25000"
+            step="500"
+            value="0"
+          />
+        </div>
 
-  .derived{margin-top:12px; font-size:12px; color:var(--acc); background:var(--acc-soft); border-radius:8px; padding:9px 11px; line-height:1.65;}
-  .derived .warn{display:block; margin-top:5px; color:var(--warn);}
+        <div class="ctrl">
+          <div class="clab">
+            <span
+              class="tip"
+              data-tip="Wie schnell der Markt für JDM-Klassiker anzieht. Reine Annahme."
+              >Wertsteigerung R34<button
+                type="button"
+                class="hbtn"
+                data-help="appr"
+              >
+                ?
+              </button></span
+            >
+            <span class="cval" id="appr-val">5 % / Jahr</span>
+          </div>
+          <input type="range" id="appr" min="0" max="12" step="1" value="5" />
+        </div>
 
-  .seg{display:flex; gap:6px; flex-wrap:wrap;}
-  .seg button{flex:1; min-width:92px; padding:9px 10px; font-size:13px; font-family:inherit; color:var(--ink2);
-    background:transparent; border:1px solid var(--line); border-radius:8px; cursor:pointer; transition:all .12s;}
-  .seg button:hover{border-color:var(--acc);}
-  .seg button.on{background:var(--acc-soft); border-color:var(--acc); color:var(--acc); font-weight:600;}
-  .seg.mini button{padding:8px; font-size:12px; min-width:76px;}
+        <div class="ctrl">
+          <div class="clab">
+            <span
+              >Welches Auto zuerst<button
+                type="button"
+                class="hbtn"
+                data-help="strat"
+              >
+                ?
+              </button></span
+            >
+          </div>
+          <div class="seg" id="strat">
+            <button data-v="dailyfirst" class="on">Daily zuerst</button>
+            <button data-v="r34first">R34 zuerst</button>
+          </div>
+        </div>
 
-  .ctrl{margin-bottom:17px;}
-  .ctrl:last-child{margin-bottom:0;}
-  .clab{font-size:13px; color:var(--ink2); margin-bottom:9px; display:flex; justify-content:space-between; align-items:baseline; gap:10px;}
-  .clab > span:first-child{display:flex; align-items:center; gap:5px;}
-  .cval{font-weight:600; color:var(--ink); font-size:14px; white-space:nowrap;}
-  input[type=range]{-webkit-appearance:none; width:100%; height:4px; background:var(--track); border-radius:2px; outline:none;}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--acc); cursor:pointer; border:none;}
-  input[type=range]::-moz-range-thumb{width:18px; height:18px; border-radius:50%; background:var(--acc); cursor:pointer; border:none;}
+        <div class="ctrl">
+          <div class="clab">
+            <span
+              >R34 bezahlen<button
+                type="button"
+                class="hbtn"
+                data-help="method"
+              >
+                ?
+              </button></span
+            >
+          </div>
+          <div class="seg" id="method">
+            <button data-v="cash" class="on">Bar</button>
+            <button data-v="fin2">Kredit · 2 Jahre</button>
+            <button data-v="fin3">Kredit · 3 Jahre</button>
+          </div>
+        </div>
+      </div>
 
-  /* ---- Hilfe-Button ---- */
-  .hbtn{flex:none; width:15px; height:15px; padding:0; line-height:13px; text-align:center;
-    font-size:10px; font-weight:700; font-family:inherit; color:var(--ink3);
-    background:transparent; border:1px solid var(--line); border-radius:50%; cursor:pointer; transition:all .12s;}
-  .hbtn:hover{color:var(--acc); border-color:var(--acc); background:var(--acc-soft);}
+      <div class="tl-wrap">
+        <div class="tl-title">
+          Zeitleiste<button type="button" class="hbtn" data-help="timeline">
+            ?
+          </button>
+        </div>
+        <div class="tl" id="tl"></div>
+      </div>
 
-  /* ---- Hover-Tooltip ---- */
-  .tip{position:relative;}
-  .tip::after{
-    content:attr(data-tip); position:absolute; left:0; bottom:calc(100% + 7px);
-    background:var(--ink); color:var(--bg); padding:7px 10px; border-radius:7px;
-    font-size:11px; font-weight:400; line-height:1.5; letter-spacing:0; text-transform:none;
-    width:max-content; max-width:250px; z-index:60; pointer-events:none;
-    opacity:0; transform:translateY(3px); transition:opacity .13s, transform .13s;
-    box-shadow:0 6px 18px rgba(0,0,0,.2);
-  }
-  .tip:hover::after,.tip:focus-visible::after{opacity:1; transform:translateY(0);}
+      <div class="panel">
+        <div class="ptitle">
+          <span
+            >Was den Termin verschiebt<button
+              type="button"
+              class="hbtn"
+              data-help="levers"
+            >
+              ?
+            </button></span
+          >
+        </div>
+        <div id="levers"></div>
+      </div>
 
-  /* ---- Ergebnis-Karten ---- */
-  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:12px; margin:20px 0 18px;}
-  .mc{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px;}
-  .mc .k{font-size:12px; color:var(--ink2); display:flex; align-items:center; gap:5px;}
-  .mc .v{font-size:22px; font-weight:600; margin-top:4px; letter-spacing:-.01em;}
-  .mc .v small{font-size:13px; font-weight:400; color:var(--ink2);}
-  .mc .x{font-size:12px; color:var(--ink3); margin-top:3px;}
-  .pill{display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; margin-top:6px;}
-  .pill.ok{background:var(--ok-bg); color:var(--ok);}
-  .pill.warn{background:var(--warn-bg); color:var(--warn);}
-  .pill.bad{background:var(--bad-bg); color:var(--bad);}
+      <details class="panel" id="detailPanel">
+        <summary>
+          <span>Feineinstellungen</span>
+          <span class="psum"
+            >alles vorbelegt — nur öffnen, wenn du etwas Bestimmtes ändern
+            willst</span
+          >
+        </summary>
+        <div class="pbody">
+          <p class="legend">
+            Jede Zahl zeigt, woher sie kommt:
+            <span class="prov live">live</span> aus einer offenen Schnittstelle,
+            <span class="prov calc">berechnet</span> aus Gesetz oder Datum,
+            <span class="prov proof">beleg</span> aus einem echten Angebot,
+            <span class="prov guess">annahme</span> geraten,
+            <span class="prov manual">manuell</span> von dir gesetzt.
+          </p>
+          <div id="inputs"></div>
+        </div>
+      </details>
 
-  .tl-wrap{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px 22px 18px;}
-  .tl-title{font-size:12px; color:var(--ink2); margin-bottom:24px; display:flex; align-items:center; gap:5px;}
-  .tl{position:relative; height:96px;}
-  .tl-line{position:absolute; top:48px; left:0; right:0; height:2px; background:var(--line);}
-  .tl-fill{position:absolute; top:48px; left:0; height:2px; background:var(--acc-bar);}
-  .mk{position:absolute; top:42px; transform:translateX(-50%);}
-  .mk .dot{width:13px; height:13px; border-radius:50%; background:var(--bg); border:2px solid var(--ink3);}
-  .mk.hi .dot{width:15px; height:15px; margin-top:-1px; background:var(--acc-bar); border-color:var(--acc-bar);}
-  .mk .lbl{position:absolute; left:50%; transform:translateX(-50%); white-space:nowrap; text-align:center; font-size:11px;}
-  .mk .lbl .d{font-weight:600; color:var(--ink);}
-  .mk .lbl .t{color:var(--ink2);}
-  .mk.up .lbl{bottom:22px;}
-  .mk.down .lbl{top:22px;}
-  .mk.hi .lbl .d,.mk.hi .lbl .t{color:var(--acc);}
+      <details class="panel" id="auditPanel">
+        <summary>
+          <span>Was noch geraten ist</span>
+          <span class="psum" id="auditSum"></span>
+        </summary>
+        <div class="pbody audit" id="audit"></div>
+      </details>
 
-  .note{font-size:12px; color:var(--ink3); margin-top:20px; line-height:1.7;}
-  .note b{color:var(--ink2); font-weight:600;}
+      <details class="panel" id="srcPanel">
+        <summary>
+          <span>Datenquellen</span>
+          <button type="button" class="hbtn" data-help="sources">?</button>
+          <span class="psum" id="srcSum">wird geladen …</span>
+        </summary>
+        <div class="pbody">
+          <div id="sources"></div>
+          <div class="pfoot">
+            <span
+              >Läuft von allein. Aufklappen brauchst du das nur, wenn eine
+              Quelle klemmt.</span
+            >
+            <button type="button" class="act" id="refresh">↻ neu laden</button>
+          </div>
+        </div>
+      </details>
 
-  /* ---- Hilfe-Modal ---- */
-  .backdrop{position:fixed; inset:0; background:rgba(0,0,0,.42); display:flex; align-items:center; justify-content:center;
-    padding:20px; z-index:100;}
-  .backdrop[hidden]{display:none;}
-  .modal{background:var(--card); border:1px solid var(--line); border-radius:14px; max-width:460px; width:100%;
-    max-height:80vh; overflow:auto; padding:22px 24px; box-shadow:0 20px 50px rgba(0,0,0,.28);}
-  .modal h3{margin:0 0 10px; font-size:16px; font-weight:600;}
-  .modal .mbody{font-size:13px; color:var(--ink2); line-height:1.65;}
-  .modal .mbody b{color:var(--ink);}
-  .mlinks{margin-top:14px; display:flex; flex-direction:column; gap:7px;}
-  .mlinks a{font-size:12.5px; color:var(--acc); text-decoration:none; font-weight:500;}
-  .mlinks a:hover{text-decoration:underline;}
-  .mclose{margin-top:18px; width:100%; padding:9px; font-family:inherit; font-size:13px; font-weight:600;
-    color:var(--ink2); background:transparent; border:1px solid var(--line); border-radius:8px; cursor:pointer;}
-  .mclose:hover{border-color:var(--acc); color:var(--acc);}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <h1>Skyline R34 — Planungsrechner</h1>
-  <p class="sub">Alle Werte editierbar und mit deinen Zahlen vorbelegt. Beide Autos sind gleichwertig einstellbar. Ein <b>?</b> öffnet eine Erklärung, Beschriftungen mit gestricheltem Verhalten zeigen beim Überfahren einen Kurzhinweis.</p>
-
-  <div class="panel">
-    <div class="ptitle"><span>Deine Zahlen</span><span class="reset" id="reset">↺ zurücksetzen</span></div>
-    <div id="inputs"></div>
-  </div>
-
-  <div class="panel">
-    <div class="ptitle"><span>Szenario</span></div>
-
-    <div class="ctrl">
-      <div class="clab"><span class="tip" data-tip="Was du heute schon auf der hohen Kante hast.">Startkapital heute<button type="button" class="hbtn" data-help="cap">?</button></span><span class="cval" id="cap-val">0 €</span></div>
-      <input type="range" id="cap" min="0" max="25000" step="500" value="0">
+      <p class="note" id="note"></p>
     </div>
 
-    <div class="ctrl">
-      <div class="clab"><span>Reihenfolge<button type="button" class="hbtn" data-help="strat">?</button></span></div>
-      <div class="seg" id="strat">
-        <button data-v="dailyfirst" class="on">Daily zuerst</button>
-        <button data-v="r34first">R34 zuerst</button>
+    <button
+      type="button"
+      class="mini"
+      id="mini"
+      aria-live="polite"
+      aria-label="Zum Ergebnis nach oben springen"
+    ></button>
+
+    <div class="backdrop" id="backdrop" hidden>
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="m-title"
+      >
+        <h3 id="m-title"></h3>
+        <div class="mbody" id="m-body"></div>
+        <div class="mlinks" id="m-links"></div>
+        <button type="button" class="mclose" id="m-close">Schließen</button>
       </div>
     </div>
-
-    <div class="ctrl">
-      <div class="clab"><span>R34 bezahlen<button type="button" class="hbtn" data-help="method">?</button></span></div>
-      <div class="seg" id="method">
-        <button data-v="cash" class="on">Bar</button>
-        <button data-v="fin2">Kredit · 2 Jahre</button>
-        <button data-v="fin3">Kredit · 3 Jahre</button>
-      </div>
-    </div>
-
-    <div class="ctrl">
-      <div class="clab"><span class="tip" data-tip="Frühester Kaufmonat. Im Kredit-Modus startet hier die Finanzierung.">R34-Kauf ab<button type="button" class="hbtn" data-help="r34start">?</button></span><span class="cval" id="start-val">06/2028</span></div>
-      <input type="range" id="start" min="0" max="66" step="1" value="23">
-    </div>
-
-    <div class="ctrl">
-      <div class="clab"><span class="tip" data-tip="Frühester Kaufmonat des Alltagsautos — gekauft wird, sobald es leistbar ist.">Daily-Kauf ab<button type="button" class="hbtn" data-help="dailystart">?</button></span><span class="cval" id="dstart-val">11/2026</span></div>
-      <input type="range" id="dstart" min="0" max="66" step="1" value="4">
-    </div>
-
-    <div class="ctrl">
-      <div class="clab"><span class="tip" data-tip="Jährliche Wertentwicklung des R34. Die Limousine steigt flacher als das Coupé.">Wertsteigerung R34<button type="button" class="hbtn" data-help="appr">?</button></span><span class="cval" id="appr-val">5 % / Jahr</span></div>
-      <input type="range" id="appr" min="0" max="12" step="1" value="5">
-    </div>
-  </div>
-
-  <div class="cards" id="cards"></div>
-
-  <div class="tl-wrap">
-    <div class="tl-title">Zeitleiste<button type="button" class="hbtn" data-help="timeline">?</button></div>
-    <div class="tl" id="tl"></div>
-  </div>
-
-  <p class="note">
-    Monat 0 = 07/2026. Versicherungsfelder sind Jahresbeiträge auf <b>„erfahren"-Niveau</b> — der SF-Zuschlag kommt im Modell obendrauf, damit du echte Angebote 1:1 eintragen kannst.
-    Alle Zahlen sind Schätzungen, bis du sie durch eigene Angebote ersetzt. Fragezeichen öffnen Erklärungen samt weiterführender Links.
-  </p>
-</div>
-
-<div class="backdrop" id="backdrop" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
-    <h3 id="m-title"></h3>
-    <div class="mbody" id="m-body"></div>
-    <div class="mlinks" id="m-links"></div>
-    <button type="button" class="mclose" id="m-close">Schließen</button>
-  </div>
-</div>
-
-<script>
-"use strict";
-
-/* ============================================================
-   Hilfetexte — Schlüssel werden von Feldern und Reglern referenziert
-   ============================================================ */
-const HELP = {
-  netNow: { t:'Netto jetzt', b:'Dein aktuelles monatliches Nettoeinkommen inklusive des steuerfreien Fahrgelds, kalibriert auf deine Abrechnung von 07/2026 (2.600 € brutto, Steuerklasse I).' },
-  netAfter: { t:'Netto nach der Erhöhung', b:'Nach der vertraglich zugesagten Erhöhung auf 3.200 € brutto. Das Modell hält dieses Netto danach konstant — spätere Erhöhungen und Inflation sind <b>nicht</b> eingerechnet. Auf drei bis vier Jahre verzerrt das wenig, macht die Prognose aber eher vorsichtig.' },
-  raiseMonth: { t:'Zeitpunkt der Erhöhung', b:'Anzahl Monate ab heute (Monat 0 = 07/2026). <b>12</b> bedeutet Juli 2027. Bis dahin rechnet das Modell mit dem aktuellen Netto, danach mit dem höheren.' },
-  fix: { t:'Fixkosten', b:'Alles, was jeden Monat gleich abgeht: Warmmiete, Strom, Internet, Handy, Versicherungen, Abos. Autokosten gehören <b>nicht</b> hier rein — die rechnet das Modell separat pro Fahrzeug.' },
-  varc: { t:'Variable Kosten', b:'Lebensmittel, Freizeit, Kleidung, Spontanes. Bewusst getrennt von den Fixkosten, damit du siehst, wie viel Spielraum in diesem Posten steckt, wenn es eng wird.' },
-  licenseOwned: { t:'Führerschein-Status', b:'<b>Noch zu machen:</b> Die Kosten werden in Monat 4 (11/2026) einmalig abgezogen, und kein Auto kann vorher gekauft werden.<br><br><b>Bereits vorhanden:</b> Kosten und Wartezeit entfallen, ein Auto ist ab sofort möglich. Das Datum darunter dient nur der Dokumentation — die Versicherungseinstufung hängt nicht am Führerscheinalter, sondern an eigenen versicherten Fahrzeugjahren.' },
-  licence: { t:'Kosten Führerschein', b:'Klasse B in Niedersachsen, realistisch 3.000–4.500 € inklusive Fahrstunden, Theorie und Prüfungsgebühren. Bei vielen Sonderfahrten oder Wiederholungsprüfungen auch mehr.' },
-  car: { t:'Kaufpreis R34', b:'Marktpreis für eine <b>GT-T Limousine</b> in fahrbereitem, ordentlichem Zustand. Das Coupé liegt deutlich darüber und ist seltener. Preise für JDM-Importe schwanken stark mit Zustand, Laufleistung und Historie — vor dem Kauf mehrere Angebote vergleichen.',
-    l:[{h:'https://www.adac.de/rund-ums-fahrzeug/oldtimer-youngtimer/recht-tipps/', n:'ADAC: Oldtimer kaufen, Zustandsnoten'}] },
-  insVariant: { t:'Versicherungsart', b:'<b>Haftpflicht:</b> gesetzliches Minimum, zahlt nur Schäden an anderen.<br><b>+ Teilkasko:</b> zusätzlich Diebstahl, Glas, Hagel, Wild, Brand.<br><b>Vollkasko:</b> zusätzlich selbstverschuldete Schäden am eigenen Auto.<br><b>Liebhaber/Oldtimer:</b> Pauschaltarif für Klassiker, unabhängig von der SF-Klasse — setzt Mindestalter (meist 25), abschließbare Garage, ein Zweitfahrzeug für den Alltag und eine gute Zustandsnote voraus.<br><br>Faustregel: Vollkasko lohnt sich bei einem 3.000-€-Daily selten, beim R34 als Wertanlage dagegen fast immer.',
-    l:[{h:'https://www.gdv.de/gdv/themen/mobilitaet/typklassen-kurz-erklaert-12228', n:'GDV: Typklassen und wie sie den Beitrag beeinflussen'}] },
-  insY: { t:'Versicherungsbeitrag', b:'Jahresbeitrag auf <b>„erfahren"-Niveau</b> (SF 3 und besser). Den Fahranfänger-Zuschlag rechnet das Modell separat über die SF-Einstufung dazu — so kannst du ein echtes Angebot direkt eintragen, ohne doppelt aufzuschlagen.<br><br>Der Betrag hängt an Typklasse und Regionalklasse. Beide kannst du vor dem Kauf kostenlos nachschlagen.',
-    l:[{h:'https://www.gdv.de/gdv/themen/mobilitaet/typklassen-kurz-erklaert-12228', n:'GDV: Typklasse deines Wunschautos abfragen'}] },
-  sf: { t:'SF-Einstufung', b:'Die Schadenfreiheitsklasse zählt <b>Jahre mit eigenem versicherten Fahrzeug</b> — nicht Führerscheinjahre. Wer nie ein Auto versichert hatte, startet bei SF 0, egal wie lange er den Schein hat.<br><br><b>Automatisch</b> leitet die Einstufung aus der gewählten Reihenfolge ab: das erste Auto startet als Fahranfänger, das zweite läuft als Zweitwagen günstiger.<br><br>Der Zuschlag schmilzt pro schadenfreiem Jahr: Fahranfänger ×2,3 → 1,8 → 1,5 → 1,3 → 1,15 → 1,0. Größter Hebel überhaupt: ein Zweitwagenvertrag über die Eltern startet oft bei SF ½ statt SF 0.',
-    l:[{h:'https://de.wikipedia.org/wiki/Schadenfreiheitsklasse', n:'Wikipedia: Schadenfreiheitsklasse'}] },
-  switch25: { t:'Tarifwechsel mit 25', b:'Ab deinem 25. Geburtstag (04/2029) wird der Liebhaber-/Oldtimertarif zugänglich. Ist der Schalter aktiv, rechnet das Modell den R34 ab diesem Monat automatisch mit der Pauschale weiter — vorher mit der gewählten normalen Variante inklusive SF-Zuschlag.<br><br>Voraussetzungen bleiben: abschließbare Garage, Alltagsauto vorhanden, guter Zustand. Fällt eine davon weg, schalte den Wechsel ab.' },
-  season: { t:'Saisonkennzeichen', b:'Zulassung für einen festen Zeitraum, hier März bis Oktober. Außerhalb darf das Auto nicht auf öffentlichem Grund stehen oder fahren.<br><br>Das Modell rechnet dann die <b>Versicherung ×0,70</b> und die <b>Steuer anteilig (8/12)</b>. Stellplatzkosten laufen weiter, weil das Auto auch im Winter irgendwo stehen muss. Für ein Wochenendauto fast immer sinnvoll, für ein Alltagsauto nicht — deshalb gibt es den Schalter nur beim R34.',
-    l:[{h:'https://de.wikipedia.org/wiki/Saisonkennzeichen', n:'Wikipedia: Saisonkennzeichen'}] },
-  hkz: { t:'H-Kennzeichen', b:'Ab <b>30 Jahren nach Erstzulassung</b> möglich. Dein 1998er R34 erreicht das im <b>Juni 2028</b>.<br><br>Vorteile: pauschale Kfz-Steuer von <b>191,73 €/Jahr</b> unabhängig vom Hubraum, Zugang zu allen Umweltzonen und zu günstigen Klassikertarifen.<br><br>Voraussetzungen: Gutachten nach §23 StVZO durch TÜV, DEKRA, GTÜ oder KÜS (etwa 80–200 €), weitgehend originaler und guter Erhaltungszustand, gültige HU. Umbauten müssen zeitgenössisch sein — starkes Tuning kann das H-Kennzeichen kosten.',
-    l:[{h:'https://www.adac.de/rund-ums-fahrzeug/oldtimer-youngtimer/recht-tipps/oldtimer-zulassung/', n:'ADAC: Oldtimer-Zulassung, H- und Saisonkennzeichen'}] },
-  taxPreH: { t:'Kfz-Steuer vor dem H-Kennzeichen', b:'Bis Juni 2028 gilt die reguläre Hubraumsteuer. Ein JDM-Import ohne europäische Abgaseinstufung landet meist in der schlechtesten Klasse.<br><br>Sätze je angefangene 100 cm³ Hubraum (Benziner):<br>• schlechter als Euro 1, ohne Schadstoffreduzierung: <b>25,36 €</b><br>• bedingt schadstoffreduziert: 21,07 €<br>• Euro 1: 15,13 € · Euro 2: 7,36 € · ab Euro 3: 6,75 €<br><br>Der RB25DET hat 2.498 cm³ = 25 angefangene Einheiten. Ohne Einstufung sind das <b>634 €/Jahr</b>. Mit Kat-Nachrüstung und Einstufung auf Euro 1 oder 2 wird es deutlich günstiger — beim Kauf in den Papieren prüfen und hier eintragen.',
-    l:[{h:'https://de.wikipedia.org/wiki/Kraftfahrzeugsteuer_(Deutschland)', n:'Wikipedia: Kraftfahrzeugsteuer Deutschland'}] },
-  taxDaily: { t:'Kfz-Steuer Daily', b:'Hubraum plus CO₂-Anteil bei Erstzulassung ab Juli 2009, davor reine Hubraumsteuer nach Abgasklasse. Für einen Euro-4-Benziner mit 1,6–2,0 l liegt das typischerweise bei 100–140 €/Jahr — im Gesamtbild ein kleiner Posten.',
-    l:[{h:'https://de.wikipedia.org/wiki/Kraftfahrzeugsteuer_(Deutschland)', n:'Wikipedia: Kraftfahrzeugsteuer Deutschland'}] },
-  maint: { t:'Wartung und Rücklage', b:'Jahresrücklage für <b>alles Planbare und Unplanbare</b>: Inspektion, Öl, Bremsen, Reifen, HU alle zwei Jahre, Zahnriemen falls vorhanden, plus Puffer für Verschleiß.<br><br>Ein Jahr kostet 200 €, das nächste 900 € — der Wert ist ein Durchschnitt. Beim R34 höher ansetzen: JDM-Teile sind teurer und teils nur aus Japan zu bekommen.' },
-  garage: { t:'Garage oder Stellplatz', b:'Monatliche Miete für den Abstellplatz. Beim R34 kein Luxus, sondern Voraussetzung: Klassiker- und Liebhabertarife verlangen fast immer eine abschließbare Garage, und ein wertsteigendes Auto gehört nicht ganzjährig unter freien Himmel.<br><br>Läuft auch bei Saisonkennzeichen ganzjährig weiter. Beim Daily meist 0, wenn er auf der Straße steht.' },
-  km: { t:'Fahrleistung', b:'Kilometer pro Jahr. Wirkt doppelt: direkt auf die Spritkosten und indirekt auf die Versicherung, denn eine niedrige, ehrlich angegebene Fahrleistung senkt den Beitrag spürbar.<br><br>Zu niedrig angeben lohnt nicht — bei einem Schaden wird der Tacho geprüft.' },
-  cons: { t:'Verbrauch', b:'Liter pro 100 km im realen Alltag, nicht nach Prospekt. Der RB25DET liegt je nach Fahrweise bei 10–13 l Super Plus, ein sparsamer Vierzylinder-Daily bei 6–8 l.' },
-  fuelPrice: { t:'Spritpreis', b:'Preis je Liter. Der R34 braucht Super Plus (98 Oktan), ein moderner Daily kommt mit E10 aus — deshalb sind beide Felder getrennt einstellbar. Spritkosten pro Monat = Fahrleistung × Verbrauch ÷ 100 × Preis ÷ 12.' },
-  price: { t:'Kaufpreis Daily', b:'Ein solides Alltagsauto mit Steuerkette und wenig Rost gibt es realistisch ab 2.500–4.000 €. Rechne <b>500–700 € obendrauf</b> für Zulassung, Kennzeichen, eventuell fällige HU und Winterreifen.' },
-  reserve: { t:'Rücklage', b:'Bargeld, das nach dem Kauf <b>liegen bleibt</b> und nicht angetastet wird. Bei einem 27 Jahre alten Import ist das keine Vorsicht, sondern Pflicht: eine Kupplung, ein Turbo oder ein Getriebe kosten schnell vierstellig.<br><br>Das Modell kauft bar erst, wenn Kaufpreis <b>und</b> Rücklage gedeckt sind, und nimmt die Rücklage bei Finanzierung von der Anzahlung aus.' },
-  rate: { t:'Kreditzins', b:'Effektiver Jahreszins eines Ratenkredits. Für einen JDM-Import gibt es meist keinen günstigen Autokredit, weil Banken den Beleihungswert nicht über Schwacke ermitteln können — realistisch ist ein freier Ratenkredit um 6–9 %.<br><br>Das Modell rechnet eine klassische Annuität: gleichbleibende Monatsrate über die Laufzeit.',
-    l:[{h:'https://de.wikipedia.org/wiki/Annuit%C3%A4tendarlehen', n:'Wikipedia: Annuitätendarlehen'}] },
-  saveRate: { t:'Tagesgeldzins', b:'Verzinsung deines Ersparten, monatlich gutgeschrieben. Auf dem Girokonto sind das 0 %, auf einem Tagesgeldkonto derzeit meist 2–3 %.<br><br>Über drei Jahre Ansparphase macht das schnell einen Monat Unterschied beim R34-Termin.' },
-  cap: { t:'Startkapital', b:'Was du heute bereits gespart hast. Je höher, desto kleiner fällt eine spätere Finanzierung aus — und desto günstiger wird der gesamte Kauf, weil weniger Zinsen anfallen.' },
-  strat: { t:'Reihenfolge der Käufe', b:'<b>Daily zuerst:</b> Du bist früh mobil und sammelst SF-Jahre auf dem günstigen Auto. Der R34 kommt später, startet dann aber als Zweitwagen — also deutlich billiger versichert.<br><br><b>R34 zuerst:</b> Du bist früher am Traumauto, versicherst es aber als Erstwagen eines Fahranfängers. Das ist der teuerste Fall, und der Daily kommt erst danach.<br><br>Die Wahl steuert auch die automatische SF-Einstufung beider Autos.' },
-  method: { t:'Bar oder Kredit', b:'<b>Bar:</b> Gekauft wird, sobald Kaufpreis und Rücklage gedeckt sind. Keine Zinsen, dafür später.<br><br><b>Kredit:</b> Gekauft wird zum eingestellten Termin. Anzahlung ist alles Ersparte über der Rücklage, der Rest läuft über die Laufzeit. Kürzere Laufzeit heißt weniger Zinsen, aber höhere Monatsrate — und die drückt genau auf den engsten Monat.' },
-  r34start: { t:'R34-Kauf ab', b:'Frühester Kaufmonat. Im Bar-Modus wird gekauft, sobald danach das Geld reicht; im Kredit-Modus startet die Finanzierung genau in diesem Monat.<br><br>Vor 06/2028 fehlt das H-Kennzeichen: höhere Kfz-Steuer und keine Klassikertarife. Der Regler lässt das bewusst zu, warnt aber.',
-    l:[{h:'https://www.adac.de/rund-ums-fahrzeug/oldtimer-youngtimer/recht-tipps/oldtimer-zulassung/', n:'ADAC: H-Kennzeichen — Voraussetzungen und Steuer'}] },
-  dailystart: { t:'Daily-Kauf ab', b:'Frühester Kaufmonat des Alltagsautos. Gekauft wird im ersten Monat danach, in dem das Geld reicht.<br><br>Bei „R34 zuerst" wartet der Daily zusätzlich, bis der R34 da ist und der Kauf die Rücklage nicht antastet. Vor dem Führerschein wird nie gekauft, egal wie der Regler steht.' },
-  appr: { t:'Wertsteigerung', b:'Angenommene jährliche Wertentwicklung des R34. Der Markt zieht seit Jahren an, weil die US-Importregel Angebot aus Japan abzieht — die Richtung ist ziemlich klar, das Tempo nicht.<br><br>Wichtig: Der Sammleraufschlag hängt vor allem am <b>Coupé</b>. Für die Limousine ist ein flacherer Wert wie 3 % realistischer, was den Zeitdruck spürbar senkt.' },
-  leftover: { t:'Frei nach Kauf', b:'Der <b>engste Monat</b> ab dem R34-Kauf: Netto minus Fixkosten, variable Kosten, Unterhalt beider Autos und Kreditrate.<br><br>Bewusst der schlechteste Monat und nicht der Durchschnitt, denn genau daran entscheidet sich, ob der Plan im Alltag trägt. Der Wert darunter zeigt den eingeschwungenen Zustand: SF abgeschmolzen, Kredit getilgt, gegebenenfalls Liebhabertarif aktiv.<br><br>Nicht enthalten: die Rücklage — die ist separat und für Reparaturen reserviert.' },
-  timeline: { t:'Zeitleiste', b:'Die Meilensteine des Plans in zeitlicher Reihenfolge. Der eingefärbte Abschnitt reicht bis zum R34-Kauf. Ereignisse erscheinen nur, wenn sie im gewählten Szenario auch vorkommen — etwa „H-Kennzeichen", wenn du vor Juni 2028 kaufst.' },
-};
-
-/* ============================================================
-   Felder
-   ============================================================ */
-const GROUPS = [
-  { title:'Einkommen & Kosten', open:true, sum:s => `${eur(s.netNow)} € netto · ${eur(s.fix + s.varc)} € raus`, fields:[
-    {key:'netNow',     label:'Netto jetzt',            unit:'€/M', def:1903, help:'netNow', tip:'Inkl. steuerfreiem Fahrgeld, Stand 07/2026'},
-    {key:'netAfter',   label:'Netto ab Erhöhung',      unit:'€/M', def:2246, help:'netAfter', tip:'Nach Erhöhung auf 3.200 € brutto'},
-    {key:'raiseMonth', label:'Erhöhung in … Monaten',  unit:'Mon', def:12,   help:'raiseMonth', tip:'12 = Juli 2027'},
-    {key:'fix',        label:'Fixkosten',              unit:'€/M', def:750,  help:'fix', tip:'Warmmiete, Strom, Internet, Handy, Abos'},
-    {key:'varc',       label:'Variable Kosten',        unit:'€/M', def:200,  help:'varc', tip:'Essen, Freizeit, Kleidung'},
-  ]},
-
-  { title:'Führerschein', open:true, sum:s => s.licenseOwned ? `vorhanden seit ${fmtYm(s.licenseSince)}` : `noch zu machen · ${eur(s.licence)} €`, fields:[
-    {type:'toggle', key:'licenseOwned', label:'Status', onLabel:'bereits vorhanden', offLabel:'noch zu machen', def:false, help:'licenseOwned'},
-    {type:'month',  key:'licenseSince', label:'Führerschein seit', def:'2024-04', showIf:'licenseOwned', tip:'Nur zur Dokumentation — die SF-Klasse hängt nicht daran'},
-    {key:'licence', label:'Kosten Führerschein', unit:'€', def:3500, hideIf:'licenseOwned', help:'licence', tip:'Klasse B, Niedersachsen'},
-  ]},
-
-  { title:'R34 · Wochenendauto', open:true, derived:'r34', sum:s => `${eur(s.car)} € · ${s.r34Ins}${s.r34Season ? ' · Saison' : ''}`, fields:[
-    {key:'car',      label:'Kaufpreis',                unit:'€',    def:28500, help:'car', tip:'GT-T Limousine, fahrbereit'},
-    {type:'seg', key:'r34Ins', target:'r34InsY', label:'Versicherungsart', def:'Vollkasko', help:'insVariant', opts:[
-      {v:'Liebhaber', p:800, tip:'Pauschal, SF-frei — ab 25, Garage, guter Zustand'},
-      {v:'Haftpfl.+TK', p:1540, tip:'Ohne Schutz bei selbstverschuldeten Schäden'},
-      {v:'Vollkasko', p:3800, tip:'Voller Schutz — bei einem Wertobjekt sinnvoll'},
-    ]},
-    {key:'r34InsY',  label:'Versicherung',             unit:'€/J',  def:3800, help:'insY', tip:'Jahresbeitrag auf „erfahren"-Niveau'},
-    {type:'seg', key:'r34Sf', label:'SF-Start', def:'Automatisch', help:'sf', opts:[
-      {v:'Automatisch', tip:'Leitet sich aus der gewählten Reihenfolge ab'},
-      {v:'Fahranfänger', tip:'SF 0 — Zuschlag ×2,3 im ersten Jahr'},
-      {v:'Zweitwagen', tip:'SF ½ — Zuschlag ×1,3'},
-      {v:'Erfahren', tip:'SF 3+ — kein Zuschlag'},
-    ]},
-    {type:'toggle', key:'r34Switch25', label:'Ab 25 (04/2029)', onLabel:'Liebhaber-Tarif', offLabel:'Variante behalten', def:true, help:'switch25', showWhen:s => s.r34Ins !== 'Liebhaber'},
-    {type:'toggle', key:'r34Season', label:'Zulassung', onLabel:'Saison 03–10', offLabel:'ganzjährig', def:true, help:'season'},
-    {key:'r34Tax',    label:'Steuer mit H',            unit:'€/J',  def:192, help:'hkz', tip:'Pauschal 191,73 € ab 06/2028 — Erklärung im ?'},
-    {key:'r34TaxPre', label:'Steuer ohne H',           unit:'€/J',  def:634, help:'taxPreH', tip:'2.498 cm³ ohne Abgaseinstufung: 25 × 25,36 €'},
-    {key:'r34Maint',  label:'Wartung / Rücklage',      unit:'€/J',  def:1200, help:'maint', tip:'Inspektion, Reifen, Bremsen, HU, Puffer'},
-    {key:'r34Garage', label:'Garage / Stellplatz',     unit:'€/M',  def:60, help:'garage', tip:'Läuft auch im Winter weiter'},
-    {key:'r34Km',     label:'Fahrleistung',            unit:'km/J', def:5000, help:'km', tip:'Wochenendauto — wenig Kilometer senken auch den Beitrag'},
-    {key:'r34Cons',   label:'Verbrauch',               unit:'l/100',def:11, help:'cons', tip:'RB25DET real 10–13 l'},
-    {key:'r34Price',  label:'Spritpreis',              unit:'€/l',  def:2.00, help:'fuelPrice', tip:'Super Plus, 98 Oktan'},
-  ]},
-
-  { title:'Daily · Alltagsauto', open:true, derived:'daily', sum:s => `${eur(s.dailyPrice)} € · ${s.dailyIns}`, fields:[
-    {key:'dailyPrice', label:'Kaufpreis',              unit:'€',    def:3000, help:'price', tip:'Plus 500–700 € für Zulassung, HU, Reifen'},
-    {type:'seg', key:'dailyIns', target:'dailyInsY', label:'Versicherungsart', def:'Haftpfl.+TK', help:'insVariant', opts:[
-      {v:'Haftpflicht', p:380, tip:'Minimum — bei einem 3.000-€-Auto vertretbar'},
-      {v:'Haftpfl.+TK', p:600, tip:'Diebstahl, Glas, Hagel, Wild — guter Kompromiss'},
-      {v:'Vollkasko', p:1150, tip:'Bei einem alten Daily selten wirtschaftlich'},
-    ]},
-    {key:'dailyInsY',  label:'Versicherung',           unit:'€/J',  def:600, help:'insY', tip:'Jahresbeitrag auf „erfahren"-Niveau'},
-    {type:'seg', key:'dailySf', label:'SF-Start', def:'Automatisch', help:'sf', opts:[
-      {v:'Automatisch', tip:'Leitet sich aus der gewählten Reihenfolge ab'},
-      {v:'Fahranfänger', tip:'SF 0 — Zuschlag ×2,3 im ersten Jahr'},
-      {v:'Zweitwagen', tip:'SF ½ — Zuschlag ×1,3'},
-      {v:'Erfahren', tip:'SF 3+ — kein Zuschlag'},
-    ]},
-    {key:'dailyTax',    label:'Kfz-Steuer',            unit:'€/J',  def:120, help:'taxDaily', tip:'Euro-4-Benziner 1,6–2,0 l: 100–140 €'},
-    {key:'dailyMaint',  label:'Wartung / Rücklage',    unit:'€/J',  def:500, help:'maint', tip:'Inspektion, Reifen, Bremsen, HU, Puffer'},
-    {key:'dailyGarage', label:'Garage / Stellplatz',   unit:'€/M',  def:0, help:'garage', tip:'0, wenn er auf der Straße steht'},
-    {key:'dailyKm',     label:'Fahrleistung',          unit:'km/J', def:10000, help:'km', tip:'Pendeln plus Alltag'},
-    {key:'dailyCons',   label:'Verbrauch',             unit:'l/100',def:7.5, help:'cons', tip:'Sparsamer Vierzylinder 6–8 l'},
-    {key:'dailyPriceL', label:'Spritpreis',            unit:'€/l',  def:1.75, help:'fuelPrice', tip:'E10'},
-  ]},
-
-  { title:'Rücklage & Zinsen', open:false, sum:s => `${eur(s.reserve)} € Rücklage · ${s.rate} % Kredit`, fields:[
-    {key:'reserve',  label:'Rücklage (bar)',           unit:'€', def:4000, help:'reserve', tip:'Bleibt nach dem Kauf unangetastet liegen'},
-    {key:'rate',     label:'Kreditzins',               unit:'%', def:7, help:'rate', tip:'Freier Ratenkredit, JDM-Import'},
-    {key:'saveRate', label:'Tagesgeldzins',            unit:'%', def:2.5, help:'saveRate', tip:'Verzinsung deines Ersparten'},
-  ]},
-];
-const ALLFIELDS = GROUPS.flatMap(g => g.fields);
-
-/* ============================================================
-   Zustand, Konstanten, Helfer
-   ============================================================ */
-const state = { cap:0, appr:5, startMonth:23, dailyStart:4, strat:'dailyfirst', method:'cash' };
-
-const HMONTH = 23;             // 06/2028 — 1998er wird 30
-const AGE25  = 33;             // 04/2029 — 25. Geburtstag
-const LICENCE_MONTH = 4;       // 11/2026
-const LIEBHABER_Y = 800;       // Pauschale ab 25
-const LIEBHABER_FALLBACK_Y = 1540; // bis 25 statt Liebhaber: Haftpfl.+TK
-const DAILY_FORCE_AFTER = 6;   // Notkauf, falls nie „leistbar"
-
-const SF_CURVES = {
-  'Fahranfänger': [2.3, 1.8, 1.5, 1.3, 1.15],
-  'Zweitwagen':   [1.3, 1.2, 1.1],
-  'Erfahren':     [1.0],
-};
-const sfAt = (level, years) => {
-  const c = SF_CURVES[level] ?? [1];
-  const y = Math.max(0, years);
-  return y < c.length ? c[y] : 1.0;
-};
-
-const annuity = (P, years, eff) => { if(P<=0) return 0; const n=years*12, r=eff/12; return r===0 ? P/n : P*r/(1-Math.pow(1+r,-n)); };
-const eur = n => Math.round(n).toLocaleString('de-DE');
-const dat = m => { if(m==null || !isFinite(m)) return '—'; const mm=(6+m)%12+1, yy=2026+Math.floor((6+m)/12); return String(mm).padStart(2,'0')+'/'+yy; };
-const fmtYm = ym => (typeof ym === 'string' && ym.includes('-')) ? ym.split('-')[1]+'/'+ym.split('-')[0] : '—';
-const monthIndexFrom = ym => {
-  if(typeof ym !== 'string') return 0;
-  const [y, m] = ym.split('-').map(Number);
-  return (!y || !m) ? 0 : (y - 2026) * 12 + (m - 7);
-};
-const licenseMonth = s => (s.licenseOwned ? monthIndexFrom(s.licenseSince) : LICENCE_MONTH);
-const esc = t => String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-const fuelM = (km, cons, price) => km * cons/100 * price / 12;
-
-/* ---- Kosten je Monat ---- */
-const resolveSf = (s, which) => {
-  const sel = which === 'r34' ? s.r34Sf : s.dailySf;
-  if(sel !== 'Automatisch') return sel;
-  const firstCar = s.strat === 'dailyfirst' ? 'daily' : 'r34';
-  return which === firstCar ? 'Fahranfänger' : 'Zweitwagen';
-};
-const r34InsAt = (s, m, years) => {
-  const season = s.r34Season ? 0.70 : 1.0;
-  if(m >= AGE25 && (s.r34Ins === 'Liebhaber' || s.r34Switch25)) return LIEBHABER_Y * season / 12;
-  const baseY = s.r34Ins === 'Liebhaber' ? LIEBHABER_FALLBACK_Y : s.r34InsY;
-  return baseY * season * sfAt(resolveSf(s,'r34'), years) / 12;
-};
-const r34TaxAt = (s, m) => (m >= HMONTH ? s.r34Tax : s.r34TaxPre) * (s.r34Season ? 8/12 : 1.0) / 12;
-const r34RunAt = (s, m, years) =>
-  r34InsAt(s, m, years) + r34TaxAt(s, m) + s.r34Maint/12 + (s.r34Garage ?? 0) + fuelM(s.r34Km, s.r34Cons, s.r34Price);
-
-const dailyInsAt = (s, years) => s.dailyInsY * sfAt(resolveSf(s,'daily'), years) / 12;
-const dailyRunAt = (s, years) =>
-  dailyInsAt(s, years) + (s.dailyTax + s.dailyMaint)/12 + (s.dailyGarage ?? 0) + fuelM(s.dailyKm, s.dailyCons, s.dailyPriceL);
-
-/* ============================================================
-   Simulation
-   ============================================================ */
-function simulate(s){
-  const OUT = s.fix + s.varc;
-  const dailyFirst = s.strat === 'dailyfirst';
-  const finance = s.method !== 'cash';
-  const term = s.method === 'fin2' ? 2 : 3;
-  const raiseM = Math.max(0, Math.round(s.raiseMonth));
-  const licM = licenseMonth(s);
-  const dailyEarliest = Math.max(0, licM, Math.round(s.dailyStart ?? 0));
-  const r34Earliest = Math.max(0, licM, Math.round(s.startMonth ?? HMONTH));
-  const net = m => m < raiseM ? s.netNow : s.netAfter;
-  const yrs = (buy, m) => Math.floor((m - buy) / 12);
-
-  let cap = s.cap, dailyMonth = null, r34Month = null, leftoverMin = null;
-  let financed = 0, payment = 0, interest = 0, priceAtBuy = 0;
-
-  for(let m=0; m<420; m++){
-    if(cap > 0) cap += cap * (s.saveRate ?? 0) / 100 / 12;
-
-    let cost = OUT;
-    if(dailyMonth != null) cost += dailyRunAt(s, yrs(dailyMonth, m));
-    if(r34Month != null){
-      cost += r34RunAt(s, m, yrs(r34Month, m));
-      if(finance && m < r34Month + term*12) cost += payment;
-    }
-    const flow = net(m) - cost;
-    cap += flow;
-    if(r34Month != null && (leftoverMin == null || flow < leftoverMin)) leftoverMin = flow;
-    if(!s.licenseOwned && m === LICENCE_MONTH) cap -= s.licence;
-
-    // --- Daily kaufen ---
-    if(dailyMonth == null && m >= dailyEarliest){
-      if(dailyFirst){
-        if(cap >= s.dailyPrice || m >= dailyEarliest + DAILY_FORCE_AFTER){ cap -= s.dailyPrice; dailyMonth = m; }
-      } else if(r34Month != null && m > r34Month && cap - s.dailyPrice >= s.reserve){
-        cap -= s.dailyPrice; dailyMonth = m;
-      }
-    }
-
-    // --- R34 kaufen ---
-    if(r34Month != null) continue;
-    if(m < r34Earliest) continue;
-    const price = s.car * Math.pow(1 + s.appr/100, m/12);
-    if(finance){
-      priceAtBuy = price;
-      const deposit = Math.max(0, cap - s.reserve);
-      financed = Math.max(0, price - deposit);
-      cap -= Math.min(deposit, price);
-      payment = annuity(financed, term, s.rate/100);
-      interest = payment * term * 12 - financed;
-      r34Month = m;
-    } else if(cap >= price + s.reserve){
-      priceAtBuy = price; cap -= price; r34Month = m;
-    }
-  }
-
-  const bothMonth = (r34Month != null && dailyMonth != null) ? Math.max(r34Month, dailyMonth) : null;
-
-  let leftoverLong = null;
-  if(r34Month != null){
-    const mL = Math.max(r34Month, AGE25, HMONTH) + 120;
-    leftoverLong = s.netAfter - OUT - dailyRunAt(s, 99) - r34RunAt(s, mL, 99);
-  }
-
-  return {r34Month, dailyMonth, bothMonth, financed, payment, interest,
-          leftover: leftoverMin, leftoverLong, priceAtBuy, finance, term, dailyFirst};
-}
-
-const statusOf = v => v >= 400 ? {w:'komfortabel', c:'ok'}
-                    : v >= 200 ? {w:'solide', c:'ok'}
-                    : v >= 100 ? {w:'eng', c:'warn'}
-                    : {w:'kritisch', c:'bad'};
-
-/* ============================================================
-   Rendering
-   ============================================================ */
-function renderDerived(s, r){
-  const mBuy = r.r34Month ?? Math.max(0, Math.round(s.startMonth ?? HMONTH));
-  const mLong = Math.max(mBuy, AGE25, HMONTH) + 120;
-  const rWarn = [];
-  if(mBuy < HMONTH) rWarn.push(`Kauf vor 06/2028: kein H-Kennzeichen — Steuer ${eur(s.r34TaxPre)} €/J statt ${eur(s.r34Tax)} €/J, keine Klassikertarife`);
-  if(s.r34Ins === 'Liebhaber'){
-    if(mBuy < AGE25) rWarn.push('Liebhaber erst ab 04/2029 — bis dahin mit Haftpfl.+TK gerechnet');
-    rWarn.push('setzt Garage, Alltagsauto und guten Zustand voraus · SF entfällt');
-  } else {
-    if(s.r34Switch25 && mBuy < AGE25) rWarn.push('ab 04/2029 auf Liebhaber gewechselt — im Langfrist-Wert enthalten');
-    rWarn.push(`SF-Start: ${resolveSf(s,'r34')}${s.r34Sf === 'Automatisch' ? ' (automatisch)' : ''}`);
-  }
-  document.getElementById('der_r34').innerHTML =
-    `Vers. ${eur(r34InsAt(s,mBuy,0))} → ${eur(r34InsAt(s,mLong,99))} €/M · Steuer ${eur(r34TaxAt(s,mBuy))} €/M · Sprit ${eur(fuelM(s.r34Km,s.r34Cons,s.r34Price))} €/M · `
-    + `<b>Unterhalt ${eur(r34RunAt(s,mBuy,0))} → ${eur(r34RunAt(s,mLong,99))} €/M</b>`
-    + (rWarn.length ? `<span class="warn">⚠ ${rWarn.join(' · ')}</span>` : '');
-
-  document.getElementById('der_daily').innerHTML =
-    `Vers. ${eur(dailyInsAt(s,0))} → ${eur(dailyInsAt(s,99))} €/M · Steuer ${eur(s.dailyTax/12)} €/M · Sprit ${eur(fuelM(s.dailyKm,s.dailyCons,s.dailyPriceL))} €/M · `
-    + `<b>Unterhalt ${eur(dailyRunAt(s,0))} → ${eur(dailyRunAt(s,99))} €/M</b>`
-    + `<span class="warn">SF-Start: ${resolveSf(s,'daily')}${s.dailySf === 'Automatisch' ? ' (automatisch)' : ''}</span>`;
-}
-
-function renderCards(r){
-  const st = statusOf(r.leftover ?? -1);
-  const fin = r.financed > 0
-    ? `<div class="v">${eur(r.financed)} <small>€</small></div><div class="x">${eur(r.interest)} € Zinsen · ${eur(r.payment)} €/M</div>`
-    : `<div class="v">Barkauf</div><div class="x">kein Kredit nötig</div>`;
-  const delta = r.priceAtBuy > state.car + 50
-    ? `<div class="x">+${eur(r.priceAtBuy - state.car)} € ggü. heute</div>`
-    : `<div class="x">wie heute</div>`;
-  document.getElementById('cards').innerHTML = `
-    <div class="mc"><div class="k">R34 im Besitz</div><div class="v">${dat(r.r34Month)}</div></div>
-    <div class="mc"><div class="k">Daily im Besitz</div><div class="v">${dat(r.dailyMonth)}</div></div>
-    <div class="mc"><div class="k">Beide Autos</div><div class="v">${dat(r.bothMonth)}</div></div>
-    <div class="mc"><div class="k">Finanzierung</div>${fin}</div>
-    <div class="mc"><div class="k">Frei nach Kauf<button type="button" class="hbtn" data-help="leftover">?</button></div>
-      <div class="v">${r.leftover == null ? '—' : eur(r.leftover)} <small>€/M</small></div>
-      <span class="pill ${st.c}">${st.w}</span>
-      <div class="x">${r.leftoverLong == null ? '' : 'langfristig ≈ ' + eur(r.leftoverLong) + ' €/M'}</div></div>
-    <div class="mc"><div class="k">R34-Preis bei Kauf</div><div class="v">${eur(r.priceAtBuy)} <small>€</small></div>${delta}</div>`;
-}
-
-function renderTimeline(r){
-  const ev = [];
-  if(!state.licenseOwned) ev.push({m:LICENCE_MONTH, d:'Führerschein'});
-  if(r.dailyMonth != null) ev.push({m:r.dailyMonth, d:'Daily'});
-  if(r.r34Month != null) ev.push({m:r.r34Month, d:'R34 gekauft', hi:true});
-  if(r.r34Month != null && r.r34Month < HMONTH) ev.push({m:HMONTH, d:'H-Kennzeichen'});
-  if(r.r34Month != null && r.r34Month < AGE25 && (state.r34Ins === 'Liebhaber' || state.r34Switch25)) ev.push({m:AGE25, d:'Liebhaber-Tarif'});
-  if(r.finance && r.r34Month != null) ev.push({m:r.r34Month + r.term*12, d:'Kredit getilgt'});
-  ev.sort((a,b) => a.m - b.m);
-
-  const box = document.getElementById('tl');
-  if(!ev.length || r.r34Month == null){ box.innerHTML = '<div class="tl-line"></div>'; return; }
-  const end = Math.max(...ev.map(e => e.m)) + 4;
-  let html = `<div class="tl-line"></div><div class="tl-fill" style="width:${(r.r34Month/end)*100}%"></div>`;
-  ev.forEach((e, i) => {
-    const x = Math.min(100, (e.m/end)*100);
-    html += `<div class="mk ${i%2===0 ? 'up' : 'down'} ${e.hi ? 'hi' : ''}" style="left:${x}%"><div class="dot"></div>`
-          + `<div class="lbl"><div class="d">${dat(e.m)}</div><div class="t">${e.d}</div></div></div>`;
-  });
-  box.innerHTML = html;
-}
-
-function applyVisibility(s){
-  ALLFIELDS.forEach(f => {
-    if(!f.showIf && !f.hideIf && !f.showWhen) return;
-    const el = document.getElementById('fld_'+f.key);
-    if(!el) return;
-    const vis = (f.showIf ? !!s[f.showIf] : true)
-             && (f.hideIf ? !s[f.hideIf] : true)
-             && (f.showWhen ? !!f.showWhen(s) : true);
-    el.style.display = vis ? '' : 'none';
-  });
-}
-
-function renderSummaries(s){
-  GROUPS.forEach((g, i) => {
-    if(!g.sum) return;
-    const el = document.getElementById('gsum_'+i);
-    if(el) el.textContent = g.sum(s);
-  });
-}
-
-function render(){
-  applyVisibility(state);
-  renderSummaries(state);
-  const r = simulate(state);
-  renderDerived(state, r);
-  renderCards(r);
-  renderTimeline(r);
-}
-
-/* ============================================================
-   Aufbau der Eingabefelder
-   ============================================================ */
-function labelHTML(f){
-  const tip = f.tip ? ` class="flab tip" data-tip="${esc(f.tip)}"` : ' class="flab"';
-  const help = f.help ? `<button type="button" class="hbtn" data-help="${f.help}" aria-label="Erklärung zu ${esc(f.label)}">?</button>` : '';
-  return `<span${tip}>${f.label}${help}</span>`;
-}
-
-function fieldHTML(f){
-  if(f.type === 'seg'){
-    const btns = f.opts.map(o =>
-      `<button data-v="${esc(o.v)}" data-p="${o.p ?? ''}"${o.tip ? ` class="tip ${o.v===f.def?'on':''}" data-tip="${esc(o.tip)}"` : ` class="${o.v===f.def?'on':''}"`}>${o.v}</button>`
-    ).join('');
-    return `<div class="fld fld-wide" id="fld_${f.key}">${labelHTML(f)}<div class="seg mini" id="seg_${f.key}">${btns}</div></div>`;
-  }
-  if(f.type === 'toggle'){
-    return `<div class="fld fld-wide" id="fld_${f.key}">${labelHTML(f)}<div class="seg mini" id="seg_${f.key}">`
-      + `<button data-v="on" class="${f.def?'on':''}">${f.onLabel}</button>`
-      + `<button data-v="off" class="${!f.def?'on':''}">${f.offLabel}</button></div></div>`;
-  }
-  if(f.type === 'month'){
-    return `<label class="fld" id="fld_${f.key}">${labelHTML(f)}<span class="finp"><input type="month" id="f_${f.key}" value="${f.def}"></span></label>`;
-  }
-  return `<label class="fld" id="fld_${f.key}">${labelHTML(f)}<span class="finp">`
-    + `<input type="number" id="f_${f.key}" value="${f.def}" step="any"><span class="unit">${f.unit}</span></span></label>`;
-}
-
-document.getElementById('inputs').innerHTML = GROUPS.map((g, i) => {
-  const body = `<div class="grid">${g.fields.map(fieldHTML).join('')}</div>`
-             + (g.derived ? `<div class="derived" id="der_${g.derived}"></div>` : '');
-  return `<details class="grp"${g.open ? ' open' : ''}>`
-       + `<summary><span class="gname">${g.title}</span><span class="gsum" id="gsum_${i}"></span></summary>`
-       + `<div class="gbody">${body}</div></details>`;
-}).join('');
-
-function setSeg(id, val){
-  const box = document.getElementById(id);
-  if(box) [...box.children].forEach(c => c.classList.toggle('on', c.dataset.v === val));
-}
-
-ALLFIELDS.forEach(f => {
-  state[f.key] = f.def;
-
-  if(f.type === 'seg'){
-    document.getElementById('seg_'+f.key).addEventListener('click', e => {
-      const b = e.target.closest('button'); if(!b) return;
-      setSeg('seg_'+f.key, b.dataset.v);
-      state[f.key] = b.dataset.v;
-      if(f.target && b.dataset.p !== ''){
-        const p = parseFloat(b.dataset.p);
-        if(!isNaN(p)){
-          state[f.target] = p;
-          const inp = document.getElementById('f_'+f.target);
-          if(inp) inp.value = p;
-        }
-      }
-      render();
-    });
-  } else if(f.type === 'toggle'){
-    document.getElementById('seg_'+f.key).addEventListener('click', e => {
-      const b = e.target.closest('button'); if(!b) return;
-      setSeg('seg_'+f.key, b.dataset.v);
-      state[f.key] = (b.dataset.v === 'on');
-      render();
-    });
-  } else if(f.type === 'month'){
-    document.getElementById('f_'+f.key).addEventListener('input', e => {
-      state[f.key] = e.target.value;
-      render();
-    });
-  } else {
-    document.getElementById('f_'+f.key).addEventListener('input', e => {
-      const v = parseFloat(e.target.value);
-      state[f.key] = isNaN(v) ? 0 : v;
-      render();
-    });
-  }
-});
-
-/* ---- Regler ---- */
-const capEl = document.getElementById('cap');
-const apprEl = document.getElementById('appr');
-const startEl = document.getElementById('start');
-const dstartEl = document.getElementById('dstart');
-
-capEl.addEventListener('input', () => {
-  state.cap = +capEl.value;
-  document.getElementById('cap-val').textContent = eur(state.cap)+' €';
-  render();
-});
-apprEl.addEventListener('input', () => {
-  state.appr = +apprEl.value;
-  document.getElementById('appr-val').textContent = state.appr+' % / Jahr';
-  render();
-});
-startEl.addEventListener('input', () => {
-  state.startMonth = +startEl.value;
-  document.getElementById('start-val').textContent = dat(state.startMonth) + (state.startMonth < HMONTH ? ' · vor H!' : '');
-  render();
-});
-dstartEl.addEventListener('input', () => {
-  state.dailyStart = +dstartEl.value;
-  const lic = licenseMonth(state);
-  document.getElementById('dstart-val').textContent = dat(Math.max(state.dailyStart, lic))
-    + (state.dailyStart < lic ? ' · Führerschein' : '');
-  render();
-});
-
-function wireSeg(id, key){
-  document.getElementById(id).addEventListener('click', e => {
-    const b = e.target.closest('button'); if(!b) return;
-    setSeg(id, b.dataset.v);
-    state[key] = b.dataset.v;
-    render();
-  });
-}
-wireSeg('strat','strat');
-wireSeg('method','method');
-
-/* ---- Hilfe-Modal ---- */
-const backdrop = document.getElementById('backdrop');
-function openHelp(key){
-  const h = HELP[key];
-  if(!h) return;
-  document.getElementById('m-title').textContent = h.t;
-  document.getElementById('m-body').innerHTML = h.b;
-  document.getElementById('m-links').innerHTML = (h.l || [])
-    .map(x => `<a href="${x.h}" target="_blank" rel="noopener noreferrer">${x.n} ↗</a>`).join('');
-  backdrop.hidden = false;
-}
-function closeHelp(){ backdrop.hidden = true; }
-
-document.addEventListener('click', e => {
-  const btn = e.target.closest('.hbtn');
-  if(btn){ e.preventDefault(); e.stopPropagation(); openHelp(btn.dataset.help); }
-});
-document.getElementById('m-close').addEventListener('click', closeHelp);
-backdrop.addEventListener('click', e => { if(e.target === backdrop) closeHelp(); });
-document.addEventListener('keydown', e => { if(e.key === 'Escape') closeHelp(); });
-
-/* ---- Zurücksetzen ---- */
-document.getElementById('reset').addEventListener('click', () => {
-  ALLFIELDS.forEach(f => {
-    state[f.key] = f.def;
-    if(f.type === 'seg'){
-      setSeg('seg_'+f.key, f.def);
-      if(f.target){
-        const o = f.opts.find(x => x.v === f.def);
-        if(o && o.p != null){
-          state[f.target] = o.p;
-          const inp = document.getElementById('f_'+f.target);
-          if(inp) inp.value = o.p;
-        }
-      }
-    } else if(f.type === 'toggle'){
-      setSeg('seg_'+f.key, f.def ? 'on' : 'off');
-    } else {
-      const inp = document.getElementById('f_'+f.key);
-      if(inp) inp.value = f.def;
-    }
-  });
-  state.cap = 0;         capEl.value = 0;      document.getElementById('cap-val').textContent = '0 €';
-  state.appr = 5;        apprEl.value = 5;     document.getElementById('appr-val').textContent = '5 % / Jahr';
-  state.startMonth = 23; startEl.value = 23;   document.getElementById('start-val').textContent = dat(23);
-  state.dailyStart = 4;  dstartEl.value = 4;   document.getElementById('dstart-val').textContent = dat(4);
-  state.strat = 'dailyfirst';  setSeg('strat','dailyfirst');
-  state.method = 'cash';       setSeg('method','cash');
-  render();
-});
-
-render();
-</script>
-</body>
+  </body>
 </html>
