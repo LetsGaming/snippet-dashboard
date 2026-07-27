@@ -7,6 +7,60 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **Snippets durften keine Dateien herausgeben.** Der Standard-Sandbox für gebündelte
+  Snippets listete `allow-downloads` nicht auf. Ein Snippet konnte damit eine Blob-URL
+  bauen, `download` am Anker setzen und klicken — der Browser verwarf den Download
+  wortlos und schrieb nur in die Konsole. Kein Fehler, kein Ereignis, nichts, was die
+  Seite hätte abfangen können. Der Datei-Export des R34-Rechners lief damit ins Leere.
+  Der Nutzer-Snippet-Sandbox bleibt bewusst ohne das Recht: eingefügter Fremdcode soll
+  keine Dateien an den Nutzer schieben können.
+- **R34-Rechner: der Schnappschuss enthielt nur einen Teil des Plans.** Gesichert wurden
+  ausschließlich Werte mit Herkunft „von dir". Alles, was über einen „übernehmen"-Knopf
+  aus eigenen Belegen abgeleitet worden war — Lebenshaltung aus echten Kontoständen,
+  Dauerauftrag aus dem Soll-Ist, gemessene Wertsteigerung — trug `proof`, und davon
+  wurde nur das Etikett gespeichert, nicht der Wert. Auf dem neuen Gerät stand der
+  Katalogwert unter einem Punkt, der „belegt" behauptete. Live geholte Zahlen
+  (Spritpreise, Inflation, Kreditzins, Tagesgeldzins, Yen-Kurs) fielen ganz durchs
+  Raster; ein Gerät ohne Netz rechnete mit Katalogvorgaben und kam zu einem anderen
+  Termin. Von neun gesetzten Werten überlebten zwei — jetzt alle.
+
+### Added
+- **R34-Rechner: Plan als Textcode übertragen.** „Code kopieren" legt den vollständigen
+  Plan als eine Zeile Text ab, „Code einfügen" liest ihn drüben wieder ein — für den
+  Wechsel zwischen Handy und Rechner, wo eine Datei umständlich ist. Gepackt über
+  `CompressionStream` (rund 70 % kürzer), base64url kodiert, damit Messenger den Code
+  nicht als Link zerlegen. Ist die Zwischenablage gesperrt — unsicherer Kontext, mobile
+  Browser —, steht der Code sichtbar im Feld und lässt sich von Hand kopieren.
+- Der Datei-Export erkennt, wenn die Ansicht keine Dateien herausgeben darf, und bietet
+  stattdessen den Code an — statt einen Klick anzubieten, der nichts tut. Das Einfügefeld
+  nimmt zusätzlich den rohen Inhalt einer exportierten JSON-Datei an, für den Fall, dass
+  auch der Dateidialog gesperrt ist.
+- Import fragt vor dem Überschreiben nach und zeigt dabei, was im Plan steckt:
+  Sicherungsdatum, Zahl der Belege, Zahl der eigenen Eingaben.
+- **Eigenes, immer sichtbares Panel „Plan sichern".** Vorher steckten die Knöpfe im Fuß
+  des zugeklappten Soll-Ist-Panels und sahen aus, als beträfen sie nur dieses Modul. Das
+  Panel zeigt, was im Plan steckt (Belege und eigene Zahlen über alle Bereiche) und ob
+  der Stand gesichert ist. Der Schritt „Plan sichern" in den nächsten Schritten kommt
+  zurück, sobald sich etwas geändert hat, statt nach einmaligem Abhaken dreißig Tage zu
+  schweigen.
+
+### Fixed
+- **R34-Rechner: Import umging die Migration.** Eine importierte Datei wurde roh in den
+  Speicher geschrieben; die Umrechnung alter Stände lief nur beim Lesen des alten
+  Speicherschlüssels. Ein Export aus einer früheren Fassung wurde dadurch falsch
+  übernommen. Datei, Textcode und Speicher laufen jetzt alle durch dieselbe Prüfung.
+- **Ein Plan aus einer neueren Fassung wird abgelehnt** statt halb verstanden zu werden.
+  Zuvor genügte ein beliebiges `v`-Feld.
+- **`planSnapshot()` gab die Belege als Referenz heraus.** Ein erstellter Export änderte
+  sich damit nachträglich mit, wenn danach eine Zeile dazukam — beim Sichern unauffällig,
+  weil sofort serialisiert wird, beim Merker nach dem Kodieren aber nicht: der Code
+  enthielt den alten Stand, der Merker den neuen, und der Plan galt fälschlich als
+  gesichert. Der Schnappschuss ist jetzt eine Kopie.
+- **Die v3-Migration löschte einen Schlüssel, den es nicht gab.** Die Bedingung stand auf
+  `m.car == null` statt `!= null`; der als Limousinen-Anker zu hohe Coupé-Preis aus v3
+  überlebte damit jede Migration.
+
+### Fixed
 - **R34-Rechner: Aufstellung „wohin das Geld fließt" ging nicht auf.** Der Ausgleich
   zwischen Tagesgeld und laufendem Konto wurde als Einzahlung gezählt, aber nie
   abgezogen. Bei einem Dauerauftrag über dem Überschuss stand dort eine als
@@ -67,6 +121,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Obergrenze, ab der ein höherer Dauerauftrag den Termin nicht mehr bewegt.
 - Das Import-Panel weist darauf hin, dass §21 und Zulassung bereits im Landepreis
   stecken und die „Nebenkosten Kauf" im Plan trotzdem dazukommen.
+- `SNAPSHOT_VERSION` auf 7. Das Feld `manual` heißt jetzt `values` und enthält auch
+  belegte Werte; `manual` bleibt als Zweitname stehen, damit ältere Exporte lesbar sind.
 - `SNAPSHOT_VERSION` auf 6. Der Speicherschlüssel bleibt `r34planer:v4`, die Form ist
   unverändert.
 

@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const SRC = "../public/snippets/r34-rechner/src";
-const { state } = await import(`${SRC}/state.js`);
+const { state, prov } = await import(`${SRC}/state.js`);
 const { seasonMonths, seasonValid, hMonthKnown } = await import(
   `${SRC}/state.js`
 );
@@ -23,7 +23,7 @@ const { importCost, priceFromLedger, apprFromLedger } = await import(
   `${SRC}/pricing.js`
 );
 const { toEur, RATE_CACHE } = await import(`${SRC}/currency.js`);
-const { ledgers } = await import(`${SRC}/ledgers.js`);
+const { ledgers, doneTasks } = await import(`${SRC}/ledgers.js`);
 const { idxFromYm, dat } = await import(`${SRC}/calendar.js`);
 
 /* `state` ist ein Modul-Singleton. Jeder Test setzt ihn auf die Katalogwerte zurück
@@ -442,4 +442,228 @@ test("kaputte Schnappschüsse werden abgelehnt statt teilweise übernommen", asy
   const { applySnapshot } = await import(`${SRC}/store.js`);
   for (const bad of [null, undefined, 42, "text"])
     assert.equal(applySnapshot(bad), false);
+});
+
+/* ---------------- Sichern und übertragen ---------------- */
+
+const store_ = await import(`${SRC}/store.js`);
+
+/** Ein Plan, wie er nach zwei Jahren Sammeln aussieht. */
+function fatPlan() {
+  withState({ living: 1234, car: 31000 });
+  prov.living = "manual";
+  prov.car = "manual";
+  ledgers.price.length = 0;
+  ledgers.actual.length = 0;
+  ledgers.insR34.length = 0;
+  for (let i = 0; i < 18; i++)
+    ledgers.price.push({
+      src: `mobile.de Inserat ${i}`,
+      date: `2026-${String((i % 12) + 1).padStart(2, "0")}`,
+      body: "Limousine",
+      amt: 28000 + i * 350,
+      cur: "EUR",
+      km: 90000 + i * 1500,
+    });
+  for (let i = 0; i < 24; i++)
+    ledgers.actual.push({
+      month: `2026-${String((i % 12) + 1).padStart(2, "0")}`,
+      amt: 3000 + i * 820,
+      src: "Monatsende",
+    });
+  ledgers.insR34.push({ src: "OCC", amt: 780, basis: "erfahren" });
+  return store_.planSnapshot();
+}
+
+test("Plan überlebt den Weg über den Textcode unverändert", async () => {
+  const snap = fatPlan();
+  const code = await store_.encodeSnapshot(snap);
+  assert.match(code, /^R34[01]:[A-Za-z0-9_-]+$/, "Code enthält nur URL-sichere Zeichen");
+  assert.deepEqual(await store_.decodeSnapshot(code), snap);
+});
+
+test("gepackter Code bleibt für eine Nachricht handhabbar", async () => {
+  const snap = fatPlan();
+  const code = await store_.encodeSnapshot(snap);
+  const plain = JSON.stringify(snap).length;
+  assert.ok(code.length < plain * 0.6, `Code ${code.length} zu JSON ${plain}`);
+});
+
+test("ungepackte Codes werden ebenfalls gelesen", async () => {
+  const snap = fatPlan();
+  const bytes = Buffer.from(JSON.stringify(snap));
+  const plain = "R340:" + bytes.toString("base64url");
+  assert.deepEqual(await store_.decodeSnapshot(plain), snap);
+});
+
+test("Codeleser wirft nicht, sondern gibt null zurück", async () => {
+  for (const bad of [
+    "",
+    " ",
+    "hallo",
+    "R34:abc",
+    "R342:abc",
+    "R341:!!!",
+    "R341:AAAA",
+    "R340:aGFsbG8",
+    null,
+    undefined,
+    42,
+    {},
+  ])
+    assert.equal(await store_.decodeSnapshot(bad), null, `bei ${JSON.stringify(bad)}`);
+});
+
+test("Umbrüche und Leerraum aus einer Nachricht stören nicht", async () => {
+  const code = await store_.encodeSnapshot(fatPlan());
+  assert.ok(await store_.decodeSnapshot(`\n  ${code}  \n`));
+});
+
+test("Fassungsprüfung nimmt Ältere an und lehnt Neuere ab", () => {
+  const snap = fatPlan();
+  assert.equal(store_.normalizeSnapshot(snap).ok, true);
+  assert.equal(store_.normalizeSnapshot({ ...snap, v: 1 }).ok, true);
+  const tooNew = store_.normalizeSnapshot({ ...snap, v: 999 });
+  assert.equal(tooNew.ok, false);
+  assert.match(tooNew.reason, /neueren Fassung/);
+  for (const bad of [null, [], 42, "text", {}, { v: 0 }])
+    assert.equal(store_.normalizeSnapshot(bad).ok, false);
+});
+
+test("Migration lässt den Ursprung unangetastet und ist wiederholbar", () => {
+  const v3 = { v: 3, manual: { sedanDisc: 20, car: 40000 }, ledgers: { price: [] } };
+  const once = store_.normalizeSnapshot(v3);
+  assert.deepEqual(v3.manual, { sedanDisc: 20, car: 40000 }, "Eingabe wurde verändert");
+  assert.equal(once.snap.manual.sedanDisc, undefined);
+  assert.equal(once.snap.manual.coupeAdd, 25);
+  // Der Coupé-Preis aus v3 ist als Limousinen-Anker falsch und fliegt ohne Belege raus
+  assert.equal(once.snap.manual.car, undefined);
+  assert.deepEqual(store_.normalizeSnapshot(once.snap).snap, once.snap);
+});
+
+test("v3-Preis bleibt, wenn Belege ihn stützen", () => {
+  const v3 = {
+    v: 3,
+    manual: { sedanDisc: 20, car: 40000 },
+    ledgers: { price: [{ date: "2026-01", amt: 39000, cur: "EUR" }] },
+  };
+  assert.equal(store_.normalizeSnapshot(v3).snap.manual.car, 40000);
+});
+
+test("Zusammenfassung beschreibt, was man sich einhandelt", () => {
+  const text = store_.snapshotSummary(fatPlan());
+  assert.match(text, /43 Belege/);
+  assert.match(text, /eigene Eingabe/);
+  assert.match(text, /gesichert am/);
+});
+
+test("Fingerabdruck ignoriert nur den Zeitstempel", () => {
+  const a = fatPlan();
+  const b = { ...a, saved: new Date(0).toISOString() };
+  assert.equal(store_.fingerprint(a), store_.fingerprint(b));
+  ledgers.actual.push({ month: "2027-01", amt: 99999 });
+  assert.notEqual(store_.fingerprint(a), store_.fingerprint(store_.planSnapshot()));
+});
+
+test("Sicherungsstand: nach dem Merken gilt der Plan als gesichert", () => {
+  const snap = fatPlan();
+  store_.markSaved(snap);
+  assert.equal(store_.isUnsaved(), false);
+  ledgers.price.push({ src: "neu", date: "2026-07", body: "Limousine", amt: 30000, cur: "EUR" });
+  assert.equal(store_.isUnsaved(), true, "eine neue Zeile muss die Erinnerung zurückholen");
+});
+
+test("der Schnappschuss deckt alle Module ab, nicht nur eines", async () => {
+  const { initState } = await import(`${SRC}/state.js`);
+  withState();
+
+  // Ein Plan, der jedes Modul berührt
+  const set = (key, value, herkunft) => {
+    state[key] = value;
+    prov[key] = herkunft;
+  };
+  set("living", 1111, "proof"); //  aus echten Kontoständen übernommen
+  set("saveFixed", 888, "proof"); //  aus dem Soll-Ist übernommen
+  set("appr", 7.5, "proof"); //  aus eigenen Inseraten gemessen
+  set("r34Km", 4200, "manual"); //  R34-Unterhalt
+  set("dailyInsY", 640, "manual"); //  Alltagsauto
+  set("impFreight", 2600, "manual"); //  Import
+  set("fuelE5", 2.41, "live"); //  Live-Quelle
+  set("inflCost", 3.1, "live");
+  set("rate", 9.4, "live");
+  set("saveRate", 2.05, "derived");
+  set("jpyRate", 163, "live");
+  state.cap = 12000;
+  state.method = "rest";
+  state.restTerm = 4;
+  ledgers.price.length = 0;
+  ledgers.actual.length = 0;
+  ledgers.insR34.length = 0;
+  ledgers.price.push({ src: "mobile.de", date: "2026-05", body: "Limousine", amt: 29500, cur: "EUR" });
+  ledgers.insR34.push({ src: "OCC", amt: 780, basis: "erfahren" });
+  ledgers.actual.push({ month: "2026-06", amt: 5200, src: "Monatsende" });
+  doneTasks.insR34 = "2026-06-01";
+
+  const watched = [
+    "living", "saveFixed", "appr", "r34Km", "dailyInsY", "impFreight",
+    "fuelE5", "inflCost", "rate", "saveRate", "jpyRate", "cap", "method", "restTerm",
+  ];
+  const before = Object.fromEntries(watched.map((k) => [k, state[k]]));
+  const snap = structuredClone(store_.planSnapshot());
+
+  // Gerätewechsel: alles auf Anfang, dann den Schnappschuss einlesen
+  initState();
+  Object.assign(state, {
+    cap: 0, appr: 4, strat: "dailyfirst", method: "cash",
+    restGoal: "date", restAmount: 10000, restRate: 350, restTerm: 3,
+  });
+  for (const k of Object.keys(ledgers)) ledgers[k] = [];
+  for (const k of Object.keys(doneTasks)) delete doneTasks[k];
+  store_.applySnapshot(snap);
+
+  for (const k of watched)
+    assert.equal(state[k], before[k], `${k} ging beim Gerätewechsel verloren`);
+  assert.equal(prov.living, "proof", "die Herkunft muss mitkommen");
+  assert.equal(prov.saveRate, "derived");
+  assert.equal(prov.r34Km, "manual");
+  assert.equal(ledgers.price.length, 1);
+  assert.equal(ledgers.insR34.length, 1);
+  assert.equal(ledgers.actual.length, 1);
+  assert.equal(doneTasks.insR34, "2026-06-01");
+});
+
+test("eine eigene Eingabe schlägt den Rückfall aus der Live-Reihe", () => {
+  withState();
+  state.rate = 6.9;
+  prov.rate = "manual";
+  store_.applySnapshot({
+    v: 7,
+    values: { rate: 6.9 },
+    origin: { rate: "manual" },
+    fallback: { rate: [11.2, "live"] },
+    ui: {},
+    ledgers: {},
+    doneTasks: {},
+  });
+  assert.equal(state.rate, 6.9, "der Rückfall darf eine Entscheidung nicht überschreiben");
+  assert.equal(prov.rate, "manual");
+});
+
+test("Exporte aus Fassung 6 bleiben lesbar", () => {
+  withState();
+  const alt = {
+    v: 6,
+    manual: { living: 1080, r34Km: 4400 },
+    origin: { living: "manual", r34Km: "manual" },
+    ui: { cap: 7000, appr: 5 },
+    ledgers: { price: [{ date: "2026-03", amt: 28900, cur: "EUR" }] },
+    doneTasks: {},
+  };
+  const check = store_.normalizeSnapshot(alt);
+  assert.equal(check.ok, true);
+  assert.deepEqual(check.snap.values, alt.manual, "der Inhalt wandert unter den neuen Namen");
+  store_.applySnapshot(check.snap);
+  assert.equal(state.living, 1080);
+  assert.equal(state.cap, 7000);
+  assert.equal(ledgers.price.length, 1);
 });

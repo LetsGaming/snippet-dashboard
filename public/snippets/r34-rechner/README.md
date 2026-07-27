@@ -145,6 +145,49 @@ Steuertarif nach §§ 8, 9 KraftStG, Finanzmathematik, Belege und Korridor.
 `tests/r34-rechner.dom.test.mjs` bootet die Seite in jsdom und prüft, dass die
 Anzeigen entstehen und die Knöpfe greifen; ohne jsdom überspringt sich die Datei.
 
+## Sichern und übertragen
+
+Der Plan liegt im Browserspeicher und überlebt weder geleerten Cache noch
+Gerätewechsel.
+
+**Gesichert wird alles, was nicht aus dem Katalog oder aus einer anderen Zahl
+folgt** — über alle Bereiche hinweg, nicht nur die Belege eines Moduls:
+
+| | |
+|---|---|
+| `values` | Handeingaben **und** belegte Werte, mit `origin` je Schlüssel |
+| `fallback` | zuletzt live geholte Zahlen, damit ein Gerät ohne Netz nicht auf Katalogwerte zurückfällt |
+| `ui` | Startkapital, Wertsteigerung, Reihenfolge, Zahlweise, Restfinanzierung |
+| `ledgers` | alle vier Belegarten |
+| `doneTasks` | abgehakte Schritte |
+| `keys` | geänderte EZB-Reihenschlüssel |
+
+Bis Fassung 6 wurden nur Werte mit `prov === "manual"` gesichert. Damit fiel
+ausgerechnet weg, was am meisten Arbeit gekostet hat: eine aus Kontoständen
+abgeleitete Lebenshaltung, ein aus eigenen Inseraten gemessener Wertzuwachs, ein
+am Soll-Ist ausgerichteter Dauerauftrag. Die tragen `proof`, und davon wurde nur
+das Etikett gespeichert. Wer hier etwas ändert: **der Filter entscheidet, was ein
+Gerätewechsel überlebt.**
+
+Zwei Wege hinaus, beide mit demselben Inhalt:
+
+- **Textcode** — eine Zeile, Format `R34<n>:<base64url>`. `n` sagt, ob gepackt
+  wurde; beim Lesen werden beide Formen erkannt, ein Code von einem alten Browser
+  lässt sich also auf einem neuen einlesen. base64url statt base64, damit `+` und
+  `/` nicht daran scheitern, dass ein Messenger den Code als Link erkennt.
+- **JSON-Datei** — für die Ablage neben den anderen Unterlagen.
+
+Beide gehen durch `normalizeSnapshot()`: Fassung prüfen, migrieren, dann erst
+übernehmen. Der frühere Datei-Import schrieb roh in den Speicher und umging die
+Migration — deshalb gibt es diesen Weg jetzt genau einmal.
+
+`planSnapshot()` liefert eine **Kopie** der Belege, keine Referenz. Sonst ändert
+sich ein bereits erstellter Export nachträglich mit.
+
+Ob der Plan gesichert ist, entscheidet ein Fingerabdruck über den Schnappschuss
+ohne Zeitstempel. Weicht er vom zuletzt gemerkten ab, steht „nicht gesichert" in
+der Zusammenfassung des Soll-Ist-Panels — sichtbar auch, wenn es zugeklappt ist.
+
 ## Konventionen
 
 - **Monat 0** ist der laufende Monat und wandert mit dem Kalender.

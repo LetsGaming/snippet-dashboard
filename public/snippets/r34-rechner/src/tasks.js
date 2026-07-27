@@ -2,6 +2,7 @@ import { ymOf } from "./calendar.js";
 import { state, prov } from "./state.js";
 import { ledgers, doneTasks } from "./ledgers.js";
 import { priceFromLedger } from "./pricing.js";
+import { isUnsaved } from "./store.js";
 
 const DONE_HIDE_DAYS = 30;
 
@@ -79,12 +80,14 @@ const TASKS = [
   },
   {
     id: "backup",
-    text: "Plan exportieren",
+    text: "Plan sichern oder aufs andere Gerät holen",
     effort: "10 Sek.",
-    when: () => ledgers.price.length + ledgers.actual.length >= 3,
+    /* Nicht „einmal erledigt und dann dreißig Tage Ruhe": der Punkt kommt zurück,
+       sobald sich der Plan seit der letzten Sicherung inhaltlich bewegt hat. */
+    when: () => ledgers.price.length + ledgers.actual.length >= 3 && isUnsaved(),
     gain: () =>
-      "Der Browserspeicher überlebt keinen geleerten Cache und keinen Gerätewechsel",
-    jump: "trackPanel",
+      "Der Browserspeicher überlebt keinen geleerten Cache und keinen Gerätewechsel. Der Code überträgt den ganzen Plan in einer Nachricht an dich selbst",
+    jump: "backupPanel",
   },
 ];
 

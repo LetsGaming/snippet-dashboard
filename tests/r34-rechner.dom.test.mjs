@@ -46,13 +46,37 @@ if (JSDOM) {
   // Kein Netz im Test: Live-Quellen sollen sauber fehlschlagen, nicht hängen.
   globalThis.fetch = () => Promise.reject(new Error("kein Netz im Test"));
   window.fetch = globalThis.fetch;
+  /* `globalThis.navigator` ist in Node schreibgeschützt und kennt keine
+     Zwischenablage — genau die Lage, die es auch in unsicherem Kontext und in
+     manchen mobilen Browsern gibt. Der Test läuft damit über den Rückfallweg:
+     der Code muss auch dann im Feld stehen, wenn das Kopieren scheitert. */
+
+  /* Die Module sprechen `location` und `URL.createObjectURL` unqualifiziert an — im
+     Browser ist das `window`, hier muss es gestellt werden. Beides wird nur beobachtet,
+     nicht ausgeführt: ein echtes reload() gäbe es in jsdom ohnehin nicht. */
+  const spy = { reloaded: 0, downloads: [], objectUrls: 0 };
+  globalThis.location = { reload: () => spy.reloaded++, href: "https://example.test/" };
+  window.URL.createObjectURL = () => (spy.objectUrls++, "blob:test");
+  window.URL.revokeObjectURL = () => {};
+  const realClick = window.HTMLAnchorElement.prototype.click;
+  window.HTMLAnchorElement.prototype.click = function () {
+    if (this.download) spy.downloads.push(this.download);
+    else realClick.call(this);
+  };
 
   const src = (f) => import(`${APP}/src/${f}`);
   const { buildFields } = await src("fields.js");
+  const store = await src("store.js");
   const { state, prov, runtime, ledgers } = await src("state.js");
   const { render } = await src("render.js");
-  const { wireFields, wireTopControls, wireLedgers, wireHelp, syncTopControls } =
-    await src("wire.js");
+  const {
+    wireFields,
+    wireTopControls,
+    wireLedgers,
+    wireHelp,
+    wireBackup,
+    syncTopControls,
+  } = await src("wire.js");
   const { auditLayout } = await src("selfcheck.js");
   const { ALLFIELDS } = await src("catalog.js");
   const el = (id) => window.document.getElementById(id);
@@ -62,6 +86,7 @@ if (JSDOM) {
   wireTopControls();
   wireLedgers();
   wireHelp();
+  wireBackup();
   syncTopControls();
   render();
 
@@ -241,4 +266,172 @@ if (JSDOM) {
     const a = now.getFullYear() * 12 + now.getMonth() + m;
     return `${Math.floor(a / 12)}-${String((a % 12) + 1).padStart(2, "0")}`;
   }
+
+  /* ---------------- Sichern und übertragen ---------------- */
+
+  const seedLedgers = () => {
+    ledgers.price.length = 0;
+    ledgers.actual.length = 0;
+    for (let i = 0; i < 4; i++)
+      ledgers.price.push({
+        src: `Inserat ${i}`,
+        date: "2026-05",
+        body: "Limousine",
+        amt: 29000 + i * 400,
+        cur: "EUR",
+      });
+    ledgers.actual.push({ month: dateOf(0), amt: 5200, src: "Monatsende" });
+  };
+
+  test("Code kopieren legt einen einlesbaren Plan ins Feld", async () => {
+    seedLedgers();
+    el("copyCode").click();
+    await settle();
+    const code = el("codeText").value;
+    assert.match(code, /^R34[01]:[A-Za-z0-9_-]+$/, `Feld enthielt: ${code.slice(0, 40)}`);
+    assert.equal(el("codeBox").hidden, false, "das Feld muss sichtbar werden");
+    const back = await store.decodeSnapshot(code);
+    assert.equal(back.ledgers.price.length, 4, "Belege fehlen im Code");
+    assert.equal(back.ledgers.actual.length, 1);
+  });
+
+  test("unbrauchbarer Code wird abgewiesen, ohne den Plan anzufassen", async () => {
+    const before = spy.reloaded;
+    el("pasteCode").click();
+    el("codeText").value = "das ist kein Code";
+    el("codeApply").click();
+    await settle();
+    assert.match(el("codeHint").textContent, /weder ein Plan-Code/);
+    assert.equal(el("codeHint").className, "lhint bad");
+    assert.equal(spy.reloaded, before, "es darf nichts übernommen worden sein");
+  });
+
+  test("Plan aus einer neueren Fassung wird abgelehnt statt halb verstanden", async () => {
+    const snap = store.planSnapshot();
+    const code = await store.encodeSnapshot({ ...snap, v: 999 });
+    const before = spy.reloaded;
+    el("pasteCode").click();
+    el("codeText").value = code;
+    el("codeApply").click();
+    await settle();
+    assert.match(el("codeHint").textContent, /neueren Fassung/);
+    assert.equal(spy.reloaded, before);
+  });
+
+  test("Übernehmen fragt nach und lässt sich abbrechen", async () => {
+    const snap = store.planSnapshot();
+    const code = await store.encodeSnapshot(snap);
+    const asked = [];
+    const realConfirm = window.confirm;
+    window.confirm = (text) => (asked.push(text), false);
+
+    const before = spy.reloaded;
+    el("pasteCode").click();
+    el("codeText").value = code;
+    el("codeApply").click();
+    await settle();
+    assert.equal(asked.length, 1, "es muss nachgefragt werden");
+    assert.match(asked[0], /Belege/, "die Rückfrage soll zeigen, was drinsteckt");
+    assert.match(asked[0], /ersetzt/);
+    assert.equal(spy.reloaded, before, "Abbruch darf nichts übernehmen");
+
+    window.confirm = () => true;
+    el("codeApply").click();
+    await settle();
+    assert.equal(spy.reloaded, before + 1, "nach Zustimmung wird übernommen");
+    window.confirm = realConfirm;
+  });
+
+  test("Inhalt einer exportierten Datei lässt sich auch einfügen", async () => {
+    const snap = store.planSnapshot();
+    const asked = [];
+    const realConfirm = window.confirm;
+    window.confirm = (t) => (asked.push(t), false);
+    el("pasteCode").click();
+    el("codeText").value = JSON.stringify(snap, null, 2);
+    el("codeApply").click();
+    await settle();
+    assert.equal(asked.length, 1, "roher JSON-Export muss angenommen werden");
+    window.confirm = realConfirm;
+  });
+
+  test("gesperrte Downloads führen zum Code statt ins Leere", async () => {
+    /* Im Snippet-iframe fehlte `allow-downloads`: der Browser verwarf den Download
+       wortlos. Der Rechner muss das erkennen und den Code anbieten. */
+    const frame = window.document.createElement("iframe");
+    // setAttribute, nicht `frame.sandbox = …`: jsdom spiegelt die Zuweisung an die
+    // DOMTokenList nicht zurück aufs Attribut, und der Test liefe ins Leere.
+    frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
+    Object.defineProperty(window, "frameElement", { value: frame, configurable: true });
+    try {
+      const before = spy.downloads.length;
+      el("export").click();
+      await settle();
+      assert.equal(spy.downloads.length, before, "es darf kein Download versucht werden");
+      assert.equal(el("codeBox").hidden, false);
+      assert.match(el("codeText").value, /^R34[01]:/);
+      assert.match(el("codeHint").textContent, /gesperrt/);
+
+      // Mit dem Recht läuft der gewohnte Weg
+      frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-downloads");
+      el("export").click();
+      await settle();
+      assert.equal(spy.downloads.length, before + 1);
+
+      // Ohne sandbox-Attribut überhaupt gilt keine Sperre
+      frame.removeAttribute("sandbox");
+      el("export").click();
+      await settle();
+      assert.equal(spy.downloads.length, before + 2);
+    } finally {
+      Object.defineProperty(window, "frameElement", { value: null, configurable: true });
+    }
+  });
+
+  test("Datei-Export lädt den Plan mit sprechendem Namen herunter", async () => {
+    const before = spy.downloads.length;
+    el("export").click();
+    await settle();
+    assert.equal(spy.downloads.length, before + 1);
+    assert.match(spy.downloads.at(-1), /^r34-plan-\d{4}-\d{2}\.json$/);
+  });
+
+  test("Sicherungsstand steht im eigenen Panel, nicht im Soll-Ist", async () => {
+    seedLedgers();
+    /* Vorherige Tests haben gesichert. Damit „nicht gesichert“ überhaupt zutrifft,
+       muss der Plan erst weiterlaufen — ein Stand, den es so noch nie gab. */
+    ledgers.actual.push({ month: dateOf(1), amt: 6100, src: "Folgemonat" });
+    render();
+    await settle();
+    assert.match(el("backupSum").textContent, /nicht gesichert/);
+
+    el("copyCode").click();
+    await settle();
+    render();
+    await settle();
+    assert.doesNotMatch(
+      el("backupSum").textContent,
+      /nicht gesichert/,
+      "nach dem Sichern muss der Hinweis weg sein",
+    );
+
+    ledgers.price.push({ src: "neu", date: "2026-06", body: "Limousine", amt: 30500, cur: "EUR" });
+    render();
+    await settle();
+    assert.match(
+      el("backupSum").textContent,
+      /nicht gesichert/,
+      "eine neue Zeile muss den Hinweis zurückholen",
+    );
+    /* Und ausdrücklich nicht im Soll-Ist-Panel: gesichert wird der ganze Plan,
+       nicht ein Modul. */
+    assert.doesNotMatch(el("trackSum").textContent, /gesichert/);
+    assert.match(el("backupState").textContent, /Belege/);
+    assert.match(el("backupState").textContent, /eigene Zahl/);
+
+    ledgers.price.length = 0;
+    ledgers.actual.length = 0;
+    render();
+    await settle();
+  });
 }

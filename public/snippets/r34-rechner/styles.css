@@ -2123,3 +2123,47 @@ table.cmp.phases tr.sumline td {
     font-size: 13px;
   }
 }
+
+
+/* ---- Plan als Code übertragen ---- */
+.codebox {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+}
+.codebox textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Der Code ist ein zusammenhängendes Wort ohne Leerzeichen — ohne den Umbruch
+     schiebt er das Panel in die Breite statt in die Höhe. */
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  resize: vertical;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 8px;
+}
+.codebox-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.codebox-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.lhint.bad {
+  color: var(--bad);
+}
+.psum.warnsum {
+  color: var(--warn);
+}

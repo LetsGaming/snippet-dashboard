@@ -50,7 +50,7 @@ import { simulate, statusOf, savingMarks } from "./simulate.js";
 import { sensitivity, spreadWindow, targetIsCredit } from "./spread.js";
 import { openTasks } from "./tasks.js";
 import { SOURCES, live, adoptLive, firstUsable } from "./sources.js";
-import { store, persist } from "./store.js";
+import { store, persist, isUnsaved, planSnapshot } from "./store.js";
 import { syncTopControls } from "./wire.js";
 import { el, helpBtn, setSeg, setInput, inWords } from "./dom.js";
 
@@ -1338,6 +1338,45 @@ function savingPhasesHTML(s, r) {
   );
 }
 
+/** Was im Plan steckt und ob es gesichert ist.
+ *
+ *  Der Zähler zählt bewusst über alle Belegarten und Handeingaben, nicht über ein
+ *  einzelnes Modul: gesichert wird der ganze Plan, und die Anzeige soll das zeigen. */
+function renderBackup() {
+  const snap = planSnapshot();
+  const led = snap.ledgers || {};
+  const rows = ["price", "insR34", "insDaily", "actual"].reduce(
+    (a, k) => a + (led[k]?.length ?? 0),
+    0,
+  );
+  const own = Object.keys(snap.values || {}).length;
+  const worth = rows + own;
+  const unsaved = worth > 0 && isUnsaved();
+
+  const sum = el("backupSum");
+  if (sum) {
+    sum.textContent = unsaved ? "nicht gesichert" : worth ? "gesichert" : "";
+    sum.className = "psum" + (unsaved ? " warnsum" : "");
+  }
+
+  const box = el("backupState");
+  if (!box) return;
+  if (!worth) {
+    box.textContent =
+      "Noch nichts einzutragen, was verloren gehen könnte. Sobald Angebote oder Kontostände dazukommen, lohnt das Sichern.";
+    return;
+  }
+  const parts = [
+    plural(rows, "Beleg", "Belege"),
+    plural(own, "eigene Zahl", "eigene Zahlen"),
+  ];
+  box.innerHTML =
+    `<b>${parts.join(" · ")}</b> im Plan. ` +
+    (unsaved
+      ? `<span class="warn">Seit der letzten Sicherung hat sich etwas geändert.</span>`
+      : "Der aktuelle Stand ist gesichert.");
+}
+
 function renderSummaries(s) {
   GROUPS.forEach((g) => {
     const node = el("gsum_" + g.id);
@@ -1513,6 +1552,7 @@ function render() {
 
   renderSummaries(state);
   renderDerived(state, run);
+  renderBackup();
   wireApprAdopt();
   if (renderRestVisibility()) renderRestSummary(run);
   renderHero(run);
@@ -1578,6 +1618,7 @@ export {
   renderRestCompare,
   actualPoints,
   renderTrack,
+  renderBackup,
   renderTasks,
   jumpTo,
   renderVisit,

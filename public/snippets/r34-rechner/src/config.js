@@ -9,13 +9,15 @@ const LIEBHABER_FALLBACK_Y = 1540;
 /* Der Schlüssel bleibt v4: die Form des Schnappschusses ist unverändert, nur die
    Fassung zählt hoch. Ein neuer Schlüssel würde jeden gespeicherten Plan verwerfen. */
 const STORE_KEY = "r34planer:v4";
-const SNAPSHOT_VERSION = 6;
+const SNAPSHOT_VERSION = 7;
 const FETCH_TIMEOUT_MS = 8000;
 const PERSIST_DEBOUNCE_MS = 400;
 const HEAVY_DEBOUNCE_MS = 160;
 const MINI_SETTLE_MS = 2000;
 const LEFTOVER_TIGHT = 150;
 const VISIT_KEY = "r34planer:lastVisit";
+/* Fingerabdruck des zuletzt gesicherten Plans — daran hängt die Erinnerung ans Sichern. */
+const BACKUP_KEY = "r34planer:lastBackup";
 const VISIT_MIN_DAYS = 3;
 
 /** Saisonkennzeichen ist auf 2 bis 11 Monate begrenzt. */
@@ -128,6 +130,7 @@ export {
   MINI_SETTLE_MS,
   LEFTOVER_TIGHT,
   VISIT_KEY,
+  BACKUP_KEY,
   VISIT_MIN_DAYS,
   SEASON_MIN,
   SEASON_MAX,

@@ -276,31 +276,67 @@
         <div class="pbody">
           <div id="track"><div class="empty">wird geladen …</div></div>
           <div class="ledger" id="led_actual"></div>
-          <div class="pfoot">
-            <span
-              >Plan sichern, bevor der Browser-Speicher ihn frisst.<button
-                type="button"
-                class="hbtn"
-                data-help="backup"
-              >
-                ?
-              </button></span
-            >
-            <span class="pfoot-actions">
-              <button type="button" class="act" id="export">
-                ↓ exportieren
-              </button>
-              <label class="act" for="importFile">↑ importieren</label>
-              <input
-                type="file"
-                id="importFile"
-                accept="application/json"
-                hidden
-              />
-            </span>
           </div>
         </div>
       </details>
+
+      <div class="panel" id="backupPanel">
+        <div class="ptitle">
+          <span
+            >Plan sichern<button type="button" class="hbtn" data-help="backup">
+              ?
+            </button></span
+          >
+          <span class="psum" id="backupSum"></span>
+        </div>
+        <p class="phint">
+          Der gesamte Plan: Stellschrauben, Fakten, Unterhalt beider Fahrzeuge,
+          alle Angebote und Kontostände, abgehakte Schritte. Der Browserspeicher
+          überlebt keinen Gerätewechsel — hier kommt alles heraus und wieder
+          hinein.
+        </p>
+        <div class="pfoot">
+          <span id="backupState"></span>
+          <span class="pfoot-actions">
+            <button type="button" class="act" id="copyCode">
+              ⧉ Code kopieren
+            </button>
+            <button type="button" class="act" id="pasteCode">
+              ⎘ Code einfügen
+            </button>
+            <button type="button" class="act" id="export">↓ Datei</button>
+            <label class="act" for="importFile">↑ Datei</label>
+            <input
+              type="file"
+              id="importFile"
+              accept="application/json,.json"
+              hidden
+            />
+          </span>
+        </div>
+        <div class="codebox" id="codeBox" hidden>
+          <textarea
+            id="codeText"
+            rows="3"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+            aria-label="Plan als Code"
+            placeholder="R34…"
+          ></textarea>
+          <div class="codebox-foot">
+            <span class="lhint" id="codeHint"></span>
+            <span class="codebox-actions">
+              <button type="button" class="act" id="codeApply">
+                übernehmen
+              </button>
+              <button type="button" class="act" id="codeClose">
+                schließen
+              </button>
+            </span>
+          </div>
+        </div>
+      </div>
 
       <div class="panel" id="tasksPanel">
         <div class="ptitle">

@@ -78,7 +78,7 @@ depending on how the snippet is loaded:
 
 - **Bundled snippets** (files under `public/snippets/`, loaded via iframe `src`)
   default to `allow-scripts allow-same-origin allow-forms allow-popups
-  allow-modals`. That is enough for a normal first-party page.
+  allow-modals allow-downloads`. That is enough for a normal first-party page.
 - **Browser snippets** (saved in `localStorage`, loaded via iframe `srcdoc`) and
   the live editor preview default to `allow-scripts` only, which gives them an
   opaque origin. They can run their code but cannot reach the app's own storage.
@@ -92,6 +92,12 @@ replace, not a merge, so list every token you need:
   "sandbox": "allow-scripts"
 }
 ```
+
+`allow-downloads` is the one that bites quietly. Without it a snippet can build a
+blob URL, set `download` on an anchor and click it, and the browser will refuse
+without raising anything the page can catch — it only logs to the console. If a
+snippet of yours offers a file and nothing arrives, check the sandbox before you
+debug the snippet.
 
 One thing to keep in mind: adding `allow-same-origin` to a `srcdoc` snippet (a
 browser snippet, or any snippet you set that way) puts it on the app's own origin,
