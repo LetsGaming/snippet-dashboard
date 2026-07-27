@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>
+    .bg { fill: #534ab7; }
+    .fg { fill: none; stroke: #ffffff; stroke-width: 4; stroke-linecap: round; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #afa9ec; }
+      .fg { stroke: #17171a; }
+    }
+  </style>
+  <rect class="bg" width="64" height="64" rx="14" />
+  <path class="fg" d="M16 42a18 18 0 1 1 32 0" />
+  <path class="fg" d="M32 40 44 25" />
+  <circle cx="32" cy="42" r="3.5" fill="#ffffff" />
+</svg>

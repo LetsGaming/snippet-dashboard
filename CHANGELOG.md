@@ -6,6 +6,70 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **R34-Rechner: Aufstellung „wohin das Geld fließt" ging nicht auf.** Der Ausgleich
+  zwischen Tagesgeld und laufendem Konto wurde als Einzahlung gezählt, aber nie
+  abgezogen. Bei einem Dauerauftrag über dem Überschuss stand dort eine als
+  „Rundungsdifferenz" beschriftete Abweichung von über 24.000 €. Der Betrag wird jetzt
+  mitgeschrieben (`giroCover`) und als eigene Zeile ausgewiesen; die Meldung nennt eine
+  verbleibende Differenz als das, was sie ist.
+- **Soll-Ist-Vergleich maß gegen einen Plan, den das Modell nicht fährt.** Die
+  Sollrate war eine Konstante aus `netNow − living` ohne Autounterhalt, Gehalts-
+  erhöhung und Inflation und lag ab dem Kauf des Alltagsautos rund 200 €/M daneben.
+  Verglichen werden jetzt Kontostandsänderungen gegen den simulierten Verlauf. Der
+  Korrekturknopf verschiebt sein Feld um die gemessene Differenz, statt über
+  `netNow − realRate` den gesamten Autounterhalt der Lebenshaltung zuzuschlagen.
+- **Der Kaufmonat lief kostenlos.** Käufe stehen jetzt vor den Kosten des Monats,
+  finanziert aus dem Stand des Vormonats. Ein Monat Versicherung, Steuer und Sprit je
+  Fahrzeug fiel zuvor unter den Tisch; Termine verschieben sich dadurch um etwa einen
+  Monat nach hinten.
+- **Das Tagesgeld konnte zinsfrei ins Minus.** Nicht gedeckte Einmalkosten landen jetzt
+  auf dem laufenden Konto, wo sie über `minGiro`/`negMonths` bereits gezählt und
+  gewarnt werden. Zuvor lief das Konto mit einem teuren Führerschein über 35 Monate
+  bis −25.855 €, ohne dass das etwas kostete.
+- **Gemessene Wertsteigerung wurde verworfen.** Karosserie-Vergleich und Karosserie-
+  wechsel prüften nur auf `manual` und überschrieben eine aus eigenen Inseraten
+  übernommene Rate mit hartkodierten 3 %/5 %.
+- **Leere Erstzulassung kippte den ganzen Plan.** Der Sentinel für unbekannte Termine
+  landete im Feld „R34 frühestens ab" und schob den Kauf auf das Jahr 85359; das
+  Ergebnis meldete dann „reicht so nicht". Der früheste Termin folgt dem H-Termin
+  außerdem nur noch, wenn ein H-Kennzeichen überhaupt beantragt werden soll.
+- Annuität rechnet den Effektivzins mit der zwölften Wurzel auf den Monat statt durch
+  zwölf zu teilen, und ist gegen `years ≤ 0` und `effRate ≤ −1` abgesichert.
+- Kfz-Steuer wird nach § 11 Abs. 4 KraftStG auf volle Euro abgerundet.
+- Terminvergleich rechnet alle Zeilen nach derselben Regel; die Kreditzeile steht nicht
+  mehr im „davon"-Block der Geldflusstabelle, weil sie nicht vom Tagesgeld kommt.
+- Kleinere Anzeigefehler: „+−3.012 € Wertsteigerung" bei negativer Rate, die
+  Anzahlungskarte behauptete immer die eingestellte Rücklage, und die Beleg-Herkunft
+  fiel nach dem Löschen aller Angebote nicht auf „geschätzt" zurück.
+
+### Added
+- **R34-Rechner: Entweder-oder-Hebel im Korridor.** Schadstoffklasse, H-Kennzeichen und
+  der Wechsel auf den Klassikertarif gehen jetzt als Sprung zwischen zwei Werten in die
+  Spanne ein statt gar nicht. Der Klassikertarif zeigt sich mit 244 €/M Spielraum als
+  größter Einzelposten überhaupt.
+- **Herkunftsart „abgeleitet"** für Zahlen, die über eine Faustregel aus einer
+  Live-Reihe entstehen — Lohnentwicklung aus dem HVPI, Tagesgeldzins aus dem
+  Einlagesatz minus 0,25. Beide trugen zuvor das Etikett „live" samt dessen
+  schmalerem Band.
+- **Grenzen für Zahlenfelder** (16 Felder) und Durchsetzung beim Einlesen alter Pläne.
+  Ein negativer Verbrauch erzeugte zuvor negative Spritkosten und damit Spielraum aus
+  dem Nichts.
+- **Testsuite** unter `tests/`: 47 Prüfungen über Kontoführung, Steuertarif,
+  Finanzmathematik und Korridor plus ein jsdom-Rauchtest der Oberfläche. Läuft über
+  `npm test` und in der CI.
+
+### Changed
+- Die Herkunft eines Feldes kippt nur noch bei einer echten Änderung auf „von dir".
+  Denselben Schätzwert erneut einzutippen senkte zuvor das Bandgewicht von 1,0 auf 0,4
+  und machte den Korridor ohne neue Information schmaler.
+- Der Sparverlauf weist aus, was liegen bleibt, statt was angewiesen wird, und nennt die
+  Obergrenze, ab der ein höherer Dauerauftrag den Termin nicht mehr bewegt.
+- Das Import-Panel weist darauf hin, dass §21 und Zulassung bereits im Landepreis
+  stecken und die „Nebenkosten Kauf" im Plan trotzdem dazukommen.
+- `SNAPSHOT_VERSION` auf 6. Der Speicherschlüssel bleibt `r34planer:v4`, die Form ist
+  unverändert.
+
 ### Added
 - **Docker deployment.** Two-stage build (Node build, then `nginx:alpine`), a
   `docker-compose.yml`, a `.dockerignore`, and an nginx config with a hash-router

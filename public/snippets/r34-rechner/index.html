@@ -3,28 +3,41 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>R34 Planungsrechner</title>
-    <link rel="stylesheet" href="styles.css" />
-    <script src="app.js" defer></script>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="favicon.svg" />
+    <link rel="stylesheet" href="styles.css?v=11" />
+    <script type="module" src="app.js?v=11"></script>
   </head>
   <body>
     <div class="wrap">
       <h1>Wann kann ich mir den R34 leisten?</h1>
+      <p class="sub">
+        Ein Datum, eine Spanne darum und die Rechnung dahinter — alles offen
+        nachvollziehbar.
+      </p>
+
+      <div class="visit" id="visit" hidden></div>
 
       <div class="hero" id="hero"></div>
 
       <div class="panel">
         <div class="ptitle">
-          <span>Deine Zahlen</span>
+          <span>Stellschrauben</span>
           <button type="button" class="act" id="reset">↺ zurücksetzen</button>
         </div>
-        <div class="grid" id="core"></div>
+        <p class="phint">
+          Die Zahlen, an denen man dreht. Unter jedem Feld steht, wie weit es
+          das Ergebnis bewegt. Alles Weitere liegt in den Feineinstellungen.
+        </p>
+        <div class="grid" id="steer"></div>
 
-        <div class="ctrl" style="margin-top: 18px">
+        <div class="ctrl" style="margin-top: 20px">
           <div class="clab">
             <span
               class="tip"
-              data-tip="Was du heute schon auf der hohen Kante hast."
+              data-tip="Was heute schon auf dem Tagesgeldkonto liegt."
               >Startkapital heute<button
                 type="button"
                 class="hbtn"
@@ -42,6 +55,7 @@
             max="25000"
             step="500"
             value="0"
+            aria-label="Startkapital heute"
           />
         </div>
 
@@ -58,9 +72,17 @@
                 ?
               </button></span
             >
-            <span class="cval" id="appr-val">5 % / Jahr</span>
+            <span class="cval" id="appr-val">4,0 % / Jahr</span>
           </div>
-          <input type="range" id="appr" min="0" max="12" step="1" value="5" />
+          <input
+            type="range"
+            id="appr"
+            min="0"
+            max="12"
+            step="0.5"
+            value="4"
+            aria-label="Wertsteigerung R34 in Prozent pro Jahr"
+          />
         </div>
 
         <div class="ctrl">
@@ -76,8 +98,10 @@
             >
           </div>
           <div class="seg" id="strat">
-            <button data-v="dailyfirst" class="on">Daily zuerst</button>
-            <button data-v="r34first">R34 zuerst</button>
+            <button type="button" data-v="dailyfirst" class="on">
+              Alltagsauto zuerst
+            </button>
+            <button type="button" data-v="r34first">R34 zuerst</button>
           </div>
         </div>
 
@@ -94,10 +118,92 @@
             >
           </div>
           <div class="seg" id="method">
-            <button data-v="cash" class="on">Bar</button>
-            <button data-v="fin2">Kredit · 2 Jahre</button>
-            <button data-v="fin3">Kredit · 3 Jahre</button>
+            <button type="button" data-v="cash" class="on">Bar</button>
+            <button type="button" data-v="fin2">Kredit · 2 Jahre</button>
+            <button type="button" data-v="fin3">Kredit · 3 Jahre</button>
+            <button type="button" data-v="rest">Restfinanzierung</button>
           </div>
+        </div>
+
+        <div class="ctrl sub-ctrl" id="restBox" hidden>
+          <div class="clab">
+            <span
+              >Was gibst du vor<button
+                type="button"
+                class="hbtn"
+                data-help="restGoal"
+              >
+                ?
+              </button></span
+            >
+          </div>
+          <div class="seg" id="restGoal">
+            <button type="button" data-v="date" class="on">Termin</button>
+            <button type="button" data-v="amount">Kreditsumme</button>
+            <button type="button" data-v="rate">Monatsrate</button>
+          </div>
+
+          <div class="grid rgrid">
+            <div class="fld" id="fld_restYm">
+              <span class="flab"
+                ><label for="f_restYm">Wunschtermin</label
+                ><button type="button" class="hbtn" data-help="restYm">?</button
+                ><span
+                  class="pdot solid tip"
+                  id="pdot_restYm"
+                  data-tip="berechnet"
+                ></span
+              ></span>
+              <span class="finp"><input type="month" id="f_restYm" /></span>
+            </div>
+
+            <div class="fld" id="fld_restAmount">
+              <span class="flab"
+                ><label for="f_restAmount">Kreditsumme höchstens</label
+                ><button type="button" class="hbtn" data-help="restAmount">
+                  ?
+                </button></span
+              >
+              <span class="finp"
+                ><input type="number" id="f_restAmount" step="any" /><span
+                  class="unit"
+                  >€</span
+                ></span
+              >
+            </div>
+
+            <div class="fld" id="fld_restRate">
+              <span class="flab"
+                ><label for="f_restRate">Monatsrate höchstens</label
+                ><button type="button" class="hbtn" data-help="restRate">
+                  ?
+                </button></span
+              >
+              <span class="finp"
+                ><input type="number" id="f_restRate" step="any" /><span
+                  class="unit"
+                  >€/M</span
+                ></span
+              >
+            </div>
+          </div>
+
+          <div class="fld fld-block" id="fld_restTerm">
+            <span class="flab"
+              ><span>Laufzeit</span
+              ><button type="button" class="hbtn" data-help="restTerm">
+                ?
+              </button></span
+            >
+            <div class="seg seg-sm" id="seg_restTerm" role="group">
+              <button type="button" data-v="2">2 Jahre</button>
+              <button type="button" data-v="3" class="on">3 Jahre</button>
+              <button type="button" data-v="4">4 Jahre</button>
+              <button type="button" data-v="5">5 Jahre</button>
+            </div>
+          </div>
+
+          <div class="derived" id="der_rest"></div>
         </div>
       </div>
 
@@ -110,19 +216,35 @@
         <div class="tl" id="tl"></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="restCmpPanel" hidden>
         <div class="ptitle">
           <span
-            >Was den Termin verschiebt<button
+            >Was ein anderer Termin ändert<button
               type="button"
               class="hbtn"
-              data-help="levers"
+              data-help="restCmp"
             >
               ?
             </button></span
           >
         </div>
-        <div id="levers"></div>
+        <div id="restCmp"><div class="empty">wird gerechnet …</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="ptitle">
+          <span
+            ><span id="leversTitle">Was den Termin verschiebt</span
+            ><button type="button" class="hbtn" data-help="levers">
+              ?
+            </button></span
+          >
+        </div>
+        <div id="levers"><div class="empty">wird gerechnet …</div></div>
+
+        <div class="subhead">Was dir nach dem Kauf im Monat bleibt</div>
+        <div id="spares"></div>
+        <p class="lrest" id="sparesNote"></p>
       </div>
 
       <details class="panel" id="detailPanel">
@@ -135,24 +257,66 @@
         </summary>
         <div class="pbody">
           <p class="legend">
-            Jede Zahl zeigt, woher sie kommt:
-            <span class="prov live">live</span> aus einer offenen Schnittstelle,
-            <span class="prov calc">berechnet</span> aus Gesetz oder Datum,
-            <span class="prov proof">beleg</span> aus einem echten Angebot,
-            <span class="prov guess">annahme</span> geraten,
-            <span class="prov manual">manuell</span> von dir gesetzt.
+            Der Punkt neben jedem Feld sagt, ob die Zahl steht:
+            <span class="pdot solid"></span> steht — live, gerechnet, belegt
+            oder von dir gesetzt. <span class="pdot open"></span> ist noch
+            geschätzt und macht die Spanne oben breiter. Zeig auf den Punkt für
+            die genaue Herkunft.
           </p>
           <div id="inputs"></div>
         </div>
       </details>
 
-      <details class="panel" id="auditPanel">
+      <details class="panel" id="trackPanel">
         <summary>
-          <span>Was noch geraten ist</span>
-          <span class="psum" id="auditSum"></span>
+          <span>Soll-Ist</span>
+          <button type="button" class="hbtn" data-help="track">?</button>
+          <span class="psum" id="trackSum"></span>
         </summary>
-        <div class="pbody audit" id="audit"></div>
+        <div class="pbody">
+          <div id="track"><div class="empty">wird geladen …</div></div>
+          <div class="ledger" id="led_actual"></div>
+          <div class="pfoot">
+            <span
+              >Plan sichern, bevor der Browser-Speicher ihn frisst.<button
+                type="button"
+                class="hbtn"
+                data-help="backup"
+              >
+                ?
+              </button></span
+            >
+            <span class="pfoot-actions">
+              <button type="button" class="act" id="export">
+                ↓ exportieren
+              </button>
+              <label class="act" for="importFile">↑ importieren</label>
+              <input
+                type="file"
+                id="importFile"
+                accept="application/json"
+                hidden
+              />
+            </span>
+          </div>
+        </div>
       </details>
+
+      <div class="panel" id="tasksPanel">
+        <div class="ptitle">
+          <span
+            >Nächste Schritte<button
+              type="button"
+              class="hbtn"
+              data-help="tasks"
+            >
+              ?
+            </button></span
+          >
+          <span class="psum" id="tasksSum"></span>
+        </div>
+        <div id="tasks"><div class="empty">wird geprüft …</div></div>
+      </div>
 
       <details class="panel" id="srcPanel">
         <summary>
@@ -177,11 +341,11 @@
 
     <button
       type="button"
-      class="mini"
-      id="mini"
-      aria-live="polite"
+      class="resultbar"
+      id="resultbar"
       aria-label="Zum Ergebnis nach oben springen"
     ></button>
+    <p class="sr-only" id="liveStatus" aria-live="polite"></p>
 
     <div class="backdrop" id="backdrop" hidden>
       <div

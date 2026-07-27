@@ -11,7 +11,8 @@
     "prebuild": "npm run snippets:manifest",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "vue": "^3.5.13"
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^22.9.0",
     "@vitejs/plugin-vue": "^5.2.1",
+    "jsdom": "^30.0.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vue-tsc": "^2.1.10"
