@@ -309,6 +309,29 @@ function migrate(snap) {
   }
   // Fassungen bis 6 kannten nur `manual`. Der Name wandert, der Inhalt bleibt gültig.
   if (!snap.values && snap.manual) snap.values = snap.manual;
+
+  /* Bis Fassung 7 gab es genau einen Gehaltssprung, abgelegt als Feldpaar. Er wird
+     zum ersten Eintrag der Schrittliste — der Wert bleibt, nur die Form ändert sich.
+     Ohne diese Umschreibung fiele die Erhöhung ersatzlos weg und der Plan würde
+     dauerhaft mit dem Ausbildungsnetto rechnen. */
+  const v = snap.values || {};
+  if (v.netAfter != null || v.raiseYm != null) {
+    snap.ledgers = snap.ledgers || {};
+    if (!Array.isArray(snap.ledgers.income) || !snap.ledgers.income.length)
+      snap.ledgers.income = [
+        {
+          month: v.raiseYm || "2027-07",
+          amt: Number(v.netAfter) || 0,
+          src: "Erhöhung",
+        },
+      ].filter((r) => r.amt > 0);
+    delete v.netAfter;
+    delete v.raiseYm;
+    if (snap.origin) {
+      delete snap.origin.netAfter;
+      delete snap.origin.raiseYm;
+    }
+  }
   snap.v = SNAPSHOT_VERSION;
   return snap;
 }
@@ -357,14 +380,31 @@ async function restore() {
   lastSaved = (await store.get(BACKUP_KEY)) ?? null;
   let raw = await store.get(STORE_KEY);
   let legacy = false;
-  if (!raw) {
-    raw = await store.get("r34planer:v3");
+  /* Ältere Schlüssel der Reihe nach. `v2` kannte noch kein Fassungsfeld und keinen
+     `ui`-Abschnitt — es wird beim Lesen in die heutige Form gebracht, sonst würde
+     die Prüfung es als „kein Plan dieses Rechners" abweisen und ein Wechsel von v2
+     auf heute den ganzen Plan stillschweigend verwerfen. */
+  for (const key of ["r34planer:v3", "r34planer:v2"]) {
+    if (raw) break;
+    raw = await store.get(key);
     legacy = !!raw;
   }
   if (!raw) return;
   try {
+    let parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && parsed.v == null && parsed.manual)
+      parsed = {
+        v: 2,
+        values: parsed.manual,
+        origin: Object.fromEntries(
+          Object.keys(parsed.manual).map((k) => [k, "manual"]),
+        ),
+        ledgers: parsed.ledgers || {},
+        doneTasks: {},
+        keys: parsed.keys || [],
+      };
     // Derselbe Weg wie beim Import: prüfen, migrieren, anwenden.
-    const check = normalizeSnapshot(JSON.parse(raw));
+    const check = normalizeSnapshot(parsed);
     if (!check.ok) return;
     applySnapshot(check.snap);
     if (legacy) await persist();

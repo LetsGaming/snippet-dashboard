@@ -12,6 +12,16 @@ import { simulate } from "./simulate.js";
    Zahl die Wirkungsangabe am Feld, beide Ranglisten und den Korridor.
    ============================================================ */
 const SLIDER_LEVERS = [
+  /* Der frühere Hebel hing am Feld „Netto nach der Erhöhung". Das gibt es nicht mehr;
+     die Unsicherheit steckt jetzt in der ganzen künftigen Reihe. `incomeShift`
+     verschiebt sie prozentual — heutiges Netto bleibt davon unberührt, das ist bekannt. */
+  {
+    key: "incomeShift",
+    label: "Künftiges Gehalt",
+    band: 8,
+    unit: "%",
+    min: -60,
+  },
   { key: "cap", label: "Startkapital", band: 4000, unit: "€", min: 0 },
   { key: "appr", label: "Wertsteigerung", band: 2, unit: "%/J", min: 0 },
 ];
@@ -22,6 +32,8 @@ const LEVERS = [
     label: f.label,
     band: f.band,
     choices: f.choices,
+    choiceRisk: f.choiceRisk,
+    choiceLabel: f.choiceLabel,
     unit: f.bandUnit || f.unit || "",
     min: 0,
     isMonth: f.type === "month",

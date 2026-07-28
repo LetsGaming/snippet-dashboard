@@ -6,7 +6,14 @@ import {
 } from "./config.js";
 import { clamp, annuity, growth } from "./format.js";
 import { dat } from "./calendar.js";
-import { licenceMonth, hMonth, age25Month, raiseMonth } from "./state.js";
+import {
+  licenceMonth,
+  hMonth,
+  age25Month,
+  incomeSteps,
+  incomeAnchor,
+  firstRaise,
+} from "./state.js";
 import { hPlateAt, r34RunAt, dailyRunAt } from "./pricing.js";
 
 /* ============================================================
@@ -39,7 +46,8 @@ function simulate(s, ov = {}) {
   const collectPath = !!ov.path;
 
   const dailyFirst = s.strat === "dailyfirst";
-  const raiseM = raiseMonth(s);
+  const steps = incomeSteps(s);
+  const anchor = incomeAnchor(s);
   const licM = licenceMonth(s);
   const hm = hMonth(s);
   const dailyEarliest = Math.max(0, licM, idxFromYm(s.dailyYm) ?? 0);
@@ -50,16 +58,59 @@ function simulate(s, ov = {}) {
     wishM != null ? wishM : (idxFromYm(s.startYm) ?? 0),
   );
 
-  const net = (m) =>
-    m < raiseM ? s.netNow : s.netAfter * growth(s.inflIncome, m - raiseM);
+  /* Bekannte Beträge schlagen jede Fortschreibung: zwischen zwei erfassten Schritten
+     gilt der erfasste Wert, weil er die Erhöhung schon enthält. Erst hinter dem
+     letzten bekannten Punkt greift die allgemeine Lohnentwicklung — sonst würde sie
+     auf Zahlen aufschlagen, die aus dem Vertrag stammen. */
+  // Die Verschiebung greift nur auf erfasste Schritte. Ohne Schritte bleibt sie
+  // wirkungslos — dann trägt das Band von „Netto heute" die Unsicherheit.
+  const shift = steps.length ? 1 + (s.incomeShift || 0) / 100 : 1;
+  /* Eine Einkommenslücke — Krankheit, Kündigung, Elternzeit — als Fenster mit
+     gekürztem Netto. Kommt aus der Vorschau; im normalen Lauf ist sie leer. */
+  const gap = ov.incomeGap || null;
+  const gapFactor = (m) =>
+    gap && m >= gap.from && m < gap.from + gap.months ? gap.factor : 1;
+  const net = (m) => gapFactor(m) * baseNet(m);
+  const baseNet = (m) => {
+    if (m >= anchor.m)
+      return anchor.amt * shift * growth(s.inflIncome, m - anchor.m);
+    let cur = s.netNow;
+    for (const st of steps) {
+      if (st.m > m) break;
+      cur = st.amt * shift;
+    }
+    return cur;
+  };
   const household = (m) => s.living * growth(s.inflCost, m);
   const yearsSince = (buy, m) => Math.floor((m - buy) / 12);
+
+  /* Der Führerschein läuft als Zahlungsstrom, nicht als Schlussrechnung: Grundgebühr,
+     Fahrstunden und Prüfungen verteilen sich über die Ausbildungszeit und enden mit
+     dem Schein. Als Einmalbetrag gerechnet stand vorher in den Monaten davor ein zu
+     hoher Kontostand — genau in der Phase, in der ohnehin am wenigsten liegt.
+
+     Die Summe bleibt gleich; ist das Fenster bis zum geplanten Termin kürzer als die
+     angesetzte Dauer, wird sie auf die verbleibenden Monate gedrängt statt gekürzt.
+     Ein Termin in der Vergangenheit fällt auf den laufenden Monat — vorher fiel die
+     Zahlung dann ganz aus, weil die Schleife bei null beginnt. */
+  const shocks = Array.isArray(ov.events) ? ov.events : [];
+  const licEnd = s.licenseOwned ? -1 : Math.max(0, licM);
+  const licSpread = Math.max(
+    1,
+    Math.min(Math.round(s.licenceMonths) || 1, licEnd + 1),
+  );
+  const licFrom = Math.max(0, licEnd - licSpread + 1);
+  const licRate = s.licenseOwned ? 0 : (s.licence || 0) / licSpread;
 
   let cap = s.cap;
   let giro = 0;
   let dailyMonth = null;
   let r34Month = null;
   let leftoverMin = null;
+  let freeMin = null;
+  let freeMonth = null;
+  let freeSum = 0;
+  let freeMonths = 0;
   let financed = 0;
   let deposited = 0;
   let payment = 0;
@@ -69,6 +120,7 @@ function simulate(s, ov = {}) {
   let extrasPaid = 0;
   let minGiro = 0;
   let negMonths = 0;
+  let overdraftMonths = 0;
   let savedTotal = 0;
   let interestEarned = 0;
   let capAtBuy = 0;
@@ -118,9 +170,23 @@ function simulate(s, ov = {}) {
       if (r34Month == null) interestEarned += credit;
     }
 
-    if (!s.licenseOwned && m === licM) {
-      spend(s.licence);
-      oneOffs.licence += s.licence;
+    /* Einmalige Rückschläge aus der Vorschau. Sie gehen wie jede andere Einmalzahlung
+       ab: reicht das Tagesgeld nicht, landet der Rest sichtbar auf dem laufenden Konto. */
+    if (shocks.length)
+      for (const e of shocks) if (e.m === m) spend(e.cost);
+
+    /* Die Fahrschule wird aus dem Monatsbudget bezahlt, nicht aus dem Tagesgeld.
+       Das ist nicht nur realistischer — niemand hebt für Fahrstunden monatlich vom
+       Sparkonto ab —, es beseitigt auch einen Widerspruch: als Griff ins Tagesgeld
+       landete die Rate auf dem laufenden Konto, sobald dort noch nichts lag, und
+       wurde dann aus dem Haushaltsüberschuss getilgt. Der gilt sonst als verbraucht.
+       Ein früher Schein war dadurch im Modell billiger als ein später, und das
+       Kapital verlief U-förmig statt monoton. Reicht der Monat nicht, holt sich der
+       Ausgleich den Rest weiterhin vom Tagesgeld — nur eben sichtbar. */
+    let licThisMonth = 0;
+    if (!s.licenseOwned && m >= licFrom && m <= licEnd) {
+      licThisMonth = licRate;
+      oneOffs.licence += licRate;
     }
 
     /* Käufe stehen vor den Kosten dieses Monats: wer im Monat m zulässt, zahlt ab m
@@ -162,22 +228,27 @@ function simulate(s, ov = {}) {
           financed = need;
           payment = pay;
           interest = pay * term * 12 - need;
+          /* Kaufmonat setzen, BEVOR gezahlt wird. `capAtBuy` ist oben schon
+             festgehalten; deckt das Tagesgeld die Nebenkosten nicht, schiebt `spend`
+             den Rest aufs laufende Konto. Solange r34Month noch null wäre, liefe das
+             als `giroCover` in die Aufstellung ein — die aber im Kaufmoment endet.
+             Die Zeilen gingen dann um genau diesen Rest nicht auf. */
+          r34Month = m;
           spend(deposit + side);
           extrasPaid += side;
           oneOffs.r34Extra += s.r34Extra || 0;
           if (hPlateAt(s, m)) oneOffs.hCert += s.hCert || 0;
-          r34Month = m;
         }
       } else if (cap >= price + side + s.reserve) {
         capAtBuy = cap;
         priceAtBuy = price;
         deposited = price;
         sideAtBuy = side;
+        r34Month = m;
         spend(price + side);
         extrasPaid += side;
         oneOffs.r34Extra += s.r34Extra || 0;
         if (hPlateAt(s, m)) oneOffs.hCert += s.hCert || 0;
-        r34Month = m;
       }
     }
 
@@ -188,7 +259,7 @@ function simulate(s, ov = {}) {
       oneOffs.hCert += s.hCert || 0;
     }
 
-    let cost = household(m);
+    let cost = household(m) + licThisMonth;
     if (dailyMonth != null) cost += dailyRunAt(s, m, yearsSince(dailyMonth, m));
     if (r34Month != null) {
       cost += r34RunAt(s, m, yearsSince(r34Month, m));
@@ -214,6 +285,34 @@ function simulate(s, ov = {}) {
     if (giro < minGiro) minGiro = giro;
     if (giro < -1) negMonths++;
     settle();
+    /* Zwei verschiedene Dinge, die vorher eine Zahl waren: `negMonths` zählt Monate,
+       in denen der Dauerauftrag mehr wollte als übrig war — das ist ein Hinweis auf
+       eine zu hohe Sparrate. `overdraftMonths` zählt, was danach wirklich im Minus
+       bleibt, weil auch das Tagesgeld leer war. Nur das ist ein echter Dispo. */
+    if (giro < -1) overdraftMonths++;
+
+    /* Was vom Monatsfluss neben dem Sparen übrig bleibt. Gemessen gegen den
+       Dauerauftrag, nicht gegen den Kontostand: Führerschein und Autokauf sind
+       Einmalzahlungen aus dem Ersparten und kein Haushaltsgeld — würden sie hier
+       mitzählen, wiese der Monat einer Fahrschulrate plötzlich mehr „zum Leben" aus.
+       Negativ heißt: der Dauerauftrag liegt über dem, was der Monat hergibt. */
+    if (stillSaving) {
+      const free = flow - toSavings;
+      if (freeMin == null || free < freeMin) {
+        freeMin = free;
+        freeMonth = m;
+      }
+      freeSum += free;
+      freeMonths++;
+    }
+
+    /* Was nach dem Ausgleich noch auf dem laufenden Konto liegt, ist ausgegeben —
+       so steht es in der Annahme, und so wird es jetzt auch gebucht. Vorher wuchs
+       der Stand still weiter und deckte später Fehlmonate ab, statt dass der
+       Ausgleich griff: dasselbe Geld galt einmal als verbraucht und einmal als
+       Sparrate. Ein negativer Stand bleibt stehen, den holt sich der Ausgleich
+       zurück, sobald wieder etwas da ist. */
+    if (giro > 0) giro = 0;
 
     if (path)
       path.push({
@@ -232,7 +331,7 @@ function simulate(s, ov = {}) {
   if (r34Month != null) {
     const mLong = Math.max(r34Month, age25Month(s), hm) + 120;
     leftoverLong =
-      s.netAfter * growth(s.inflIncome, mLong - raiseM) -
+      net(mLong) -
       household(mLong) -
       dailyRunAt(s, mLong, 99) -
       r34RunAt(s, mLong, 99);
@@ -263,7 +362,9 @@ function simulate(s, ov = {}) {
        das Alltagsauto danach und zählt dort nicht mit. Der Führerschein liegt
        immer davor, weil r34Earliest den Führerscheinmonat einschließt. */
     preBuy: {
-      licence: oneOffs.licence,
+      /* Nur was direkt vom Tagesgeld abging. Die Fahrschule läuft über die
+         Monatskosten und steckt damit bereits in `savedTotal`. */
+      licence: 0,
       daily:
         dailyMonth != null && r34Month != null && dailyMonth <= r34Month
           ? oneOffs.daily
@@ -271,6 +372,14 @@ function simulate(s, ov = {}) {
     },
     leftover: leftoverMin,
     leftoverLong,
+    // Zum Leben während der Sparphase: engster Monat und Durchschnitt
+    free: freeMin,
+    // In welchem Monat es am engsten wird und bis wann die Fahrschule läuft — die
+    // Anzeige muss unterscheiden, ob der Dauerauftrag zu hoch ist oder nur gerade
+    // die Fahrstunden mitlaufen.
+    freeMonth,
+    licenceUntil: s.licenseOwned ? null : licEnd,
+    freeAvg: freeMonths ? freeSum / freeMonths : null,
     priceAtBuy,
     // Nebenkosten, die im Kaufmonat selbst fällig wurden. Ein H-Gutachten, das erst
     // später kommt, steckt in oneOffs.hCert, aber nicht hier.
@@ -282,6 +391,7 @@ function simulate(s, ov = {}) {
     isRest,
     minGiro,
     negMonths,
+    overdraftMonths,
     path,
   };
 }
@@ -300,14 +410,18 @@ const statusOf = (v) =>
    deshalb stehen hier die Stützstellen des Verlaufs. */
 function savingMarks(s, r) {
   if (!r.path || !r.path.length) return [];
-  const raise = raiseMonth(s);
+  const raise = firstRaise(s);
   const wanted = [{ m: 0, label: "heute" }];
   if (r.dailyMonth != null && r.dailyMonth + 1 < r.path.length)
     wanted.push({
       m: r.dailyMonth + 1,
       label: `ab Alltagsauto ${dat(r.dailyMonth)}`,
     });
-  if (raise > 0) wanted.push({ m: raise, label: `ab Erhöhung ${dat(raise)}` });
+  if (raise && raise.m > 0)
+    wanted.push({
+      m: raise.m,
+      label: `ab ${raise.note || "Erhöhung"} ${dat(raise.m)}`,
+    });
   if (r.r34Month != null && r.r34Month > 0)
     wanted.push({ m: r.r34Month - 1, label: "kurz vor dem Kauf" });
 

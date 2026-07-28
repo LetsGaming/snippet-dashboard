@@ -9,6 +9,7 @@ import {
   isSolid,
   LEFTOVER_TIGHT,
   HEAVY_DEBOUNCE_MS,
+  FORECAST_DEBOUNCE_MS,
   MINI_SETTLE_MS,
   VISIT_KEY,
   VISIT_MIN_DAYS,
@@ -48,6 +49,7 @@ import {
 } from "./pricing.js";
 import { simulate, statusOf, savingMarks } from "./simulate.js";
 import { sensitivity, spreadWindow, targetIsCredit } from "./spread.js";
+import { forecast, narrowingBy } from "./forecast.js";
 import { openTasks } from "./tasks.js";
 import { SOURCES, live, adoptLive, firstUsable } from "./sources.js";
 import { store, persist, isUnsaved, planSnapshot } from "./store.js";
@@ -183,9 +185,48 @@ function applyVisibility(s) {
 }
 
 /* ---- Ergebnis oben ---- */
+/** Anteil als gerundeter Prozentsatz. */
+const share = (x) => Math.round(x * 100) + " %";
+
 function renderSpread(run, spread) {
   const node = el("spread");
   if (!node) return;
+
+  /* Liegt eine Vorschau vor, kommt die Spanne aus ihr: gezogene Verteilung statt
+     quadratisch addierter Einzelausschläge. Die Faustformel bleibt als Rückfall für
+     den ersten Render und für den Fall, dass der Termin an der Kreditsumme hängt. */
+  const fc = runtime.lastForecast;
+  if (fc && fc.months && run.r34Month != null && !(spread && spread.byCredit)) {
+    const risk = [];
+    if (fc.neverShare >= 0.02)
+      risk.push(`in ${share(fc.neverShare)} der Fälle reicht es gar nicht`);
+    if (fc.tightShare >= 0.15)
+      risk.push(`in ${share(fc.tightShare)} bleiben danach unter 100 €/M`);
+    /* Die Mitte der Verteilung steht bewusst NICHT als dritte gleichrangige Zahl neben
+       der Überschrift. Vorher standen „R34 ab 10/2031" und „Mitte 07/2032" acht Zentimeter
+       auseinander, beide ohne Kommentar — das liest sich als „der Rechner weiß es selbst
+       nicht" und war der Hauptgrund, warum die Rechnung misstrauisch macht. Es gibt eine
+       Antwort: deine Zahlen. Die Mitte erklärt den Abstand dazu, statt mit ihr zu
+       konkurrieren. */
+    const drift = fc.months.p50 - run.r34Month;
+    node.innerHTML =
+      `<div class="sp-row">` +
+      `<span class="sp-cell good"><span class="sp-k">jeder zehnte Durchlauf früher</span><span class="sp-v">${dat(fc.months.p10)}</span></span>` +
+      `<span class="sp-cell base"><span class="sp-k">deine Zahlen wörtlich</span><span class="sp-v">${dat(run.r34Month)}</span></span>` +
+      `<span class="sp-cell bad"><span class="sp-k">jeder zehnte Durchlauf später</span><span class="sp-v">${dat(fc.months.p90)}</span></span>` +
+      `</div>` +
+      `<div class="sp-mid">Mitte aller Durchläufe: <b>${dat(fc.months.p50)}</b>` +
+      (drift > 1
+        ? ` — ${plural(drift, "Monat", "Monate")} später als deine Rechnung, weil Kosten nach oben mehr Luft haben als nach unten und Rückschläge dazukommen.`
+        : drift < -1
+          ? ` — ${plural(-drift, "Monat", "Monate")} früher als deine Rechnung.`
+          : ` — deckt sich mit deiner Rechnung.`) +
+      `</div>` +
+      (risk.length ? `<div class="sp-risk">${risk.join(" · ")}</div>` : "") +
+      `<button type="button" class="sp-more" data-modal="spread">Woher die Spanne kommt</button>`;
+    return;
+  }
+
   const w = spreadWindow(run, spread);
   if (!w || !w.ok) {
     node.innerHTML = `<span class="sp-none">${
@@ -286,7 +327,56 @@ function renderHero(r) {
       ),
     );
   }
+  /* „Wie viel landet eigentlich auf dem Tagesgeld?" war bis hierher an vier Stellen
+     verteilt und nirgends vollständig: oben stand der Dauerauftrag (die Anweisung, nicht
+     der Zufluss), im Sparverlauf vier Stichproben, in der Geldflusstabelle nur Summen bis
+     zum Kauf. Die Kette angewiesen → zurückgeholt → liegen geblieben gab es an keiner
+     Stelle am Stück. */
+  const bis = r.r34Month ?? 0;
+  const wege = r.path ? r.path.slice(0, bis) : [];
+  const mittelNetto = wege.length
+    ? wege.reduce((a, p) => a + p.net, 0) / wege.length
+    : 0;
+  const mittelBrutto = wege.length
+    ? wege.reduce((a, p) => a + p.save, 0) / wege.length
+    : 0;
   cards.push(
+    statCard(
+      "Aufs Tagesgeld",
+      `${eur(mittelNetto)} €/M`,
+      mittelBrutto > mittelNetto + 1
+        ? `im Schnitt · angewiesen ${eur(mittelBrutto)} €, davon ${eur(mittelBrutto - mittelNetto)} € zurückgeholt`
+        : `im Schnitt · insgesamt ${eur(r.savedTotal - Math.max(0, r.giroCover))} €`,
+      "tagesgeld",
+    ),
+  );
+
+  cards.push(
+    /* Die Sparphase ist die längere Zeit, hatte aber keine eigene Zahl. „Danach frei"
+       beantwortet nicht, wovon man bis dahin lebt — und genau da wird es eng. */
+    /* Dieselbe Behandlung wie „Danach frei": eine Zahl ohne Einordnung neben einer mit
+       Einordnung liest sich, als sei die eine wichtig und die andere nicht. Ein Minus
+       während der Fahrschulzeit ist vorübergehend und kein kaputter Plan — das trennt
+       die Beschriftung, statt beides rot zu färben. */
+    statCard(
+      "Bis dahin frei",
+      `${r.free == null ? "—" : eur(r.free) + " €"}` +
+        (r.free == null
+          ? ""
+          : r.free >= 0
+            ? `<span class="pill ${statusOf(r.free).c}">${statusOf(r.free).w}</span>`
+            : r.licenceUntil != null && r.freeMonth <= r.licenceUntil
+              ? `<span class="pill warn">vorübergehend</span>`
+              : `<span class="pill bad">zu knapp</span>`),
+      r.free == null
+        ? "keine Sparphase"
+        : r.free >= 0
+          ? `engster Monat · Schnitt ${eur(r.freeAvg)} €`
+          : r.licenceUntil != null && r.freeMonth <= r.licenceUntil
+            ? `engster Monat · Fahrschule läuft bis ${dat(r.licenceUntil)} mit`
+            : `engster Monat · Dauerauftrag ${eur(-r.free)} € zu hoch`,
+      "freeSaving",
+    ),
     statCard(
       "Danach frei im Monat",
       `${r.leftover == null ? "—" : eur(r.leftover) + " €"}<span class="pill ${st.c}">${st.w}</span>`,
@@ -313,14 +403,19 @@ function renderHero(r) {
           : "Barkauf, kein Kredit nötig"
       }`;
 
+  /* Zwei getrennte Aussagen, die vorher zu einer verschmolzen waren. Der frühere Text
+     behauptete einen Dispo samt Zinsen — dabei holt sich der Ausgleich das Geld im
+     selben Monat vom Tagesgeld, und das Konto steht am Monatsende auf null. Eine
+     Warnung, die etwas Falsches behauptet, kostet mehr Vertrauen als sie einbringt. */
   const warn =
-    r.negMonths > 0
-      ? `<div class="hwarn">⚠ Das laufende Konto rutscht <b>${plural(r.negMonths, "Monat", "Monate")}</b>
-         ins Minus, tiefstens bei <b>${eur(r.minGiro)} €</b>. ${
-           state.saveMode === "fixed"
-             ? "Der Dauerauftrag ist für diese Phase zu hoch angesetzt."
-             : "Die laufenden Kosten übersteigen zeitweise das Netto."
-         } Dispozinsen sind nicht gerechnet.</div>`
+    r.overdraftMonths > 0
+      ? `<div class="hwarn">⚠ In <b>${plural(r.overdraftMonths, "Monat", "Monaten")}</b> reicht
+         auch das Tagesgeld nicht, tiefstens <b>${eur(r.minGiro)} €</b>. Dispozinsen sind nicht gerechnet.</div>`
+      : r.negMonths > 0
+        ? `<div class="hwarn">⚠ In <b>${plural(r.negMonths, "Monat", "Monaten")}</b> gibt der Monat
+           den Dauerauftrag nicht her — bis zu <b>${eur(-r.minGiro)} €</b> kommen dann vom Tagesgeld
+           zurück. Der Termin ändert sich dadurch nicht, aber ${eur(state.saveFixed)} € sind nicht
+           der Betrag, den du wirklich zurücklegen kannst.</div>`
       : "";
 
   box.className = "hero";
@@ -400,7 +495,13 @@ function spreadModalHTML() {
        <div><b>Warum nicht addiert?</b> Liefen alle Posten gleichzeitig ins Extrem, käme
          ${fmtAbs(w.base + sp.extremeDown)} bis ${fmtAbs(w.base + sp.extremeUp)} heraus. Dass
          Spritpreis, Miete, Kaufpreis und Zins alle zusammen am ungünstigsten Rand landen, ist
-         kein Normalfall — deshalb werden die Abweichungen quadratisch zusammengefasst.</div>
+         kein Normalfall.</div>
+       <div><b>Woher die Spanne oben kommt.</b> Die Balken hier zeigen jeden Posten einzeln.
+         Die Spanne im Ergebnis entsteht anders: der Rechner zieht ein paar hundert vollständige
+         Durchläufe, in denen alle offenen Zahlen gleichzeitig neu ausgewürfelt werden — die
+         Inflationsabhängigen gemeinsam, weil sie zusammenhängen, Kosten schief nach oben, dazu
+         Rückschläge wie eine große Reparatur oder ein Einkommensausfall. Deshalb liegt die
+         Mitte dieser Durchläufe hinter deiner Punktrechnung.</div>
        <div><b>Belegen verkürzt die Balken.</b> Eine geschätzte Zahl zählt voll, eine live
          bezogene zu 60 %, eine von dir gesetzte zu 40 %, eine belegte nur zu 25 %. Eine
          gerechnete Größe wie die Kfz-Steuer streut gar nicht.</div>
@@ -528,25 +629,29 @@ function renderLevers(spread) {
 
   const bar = (r, value, max, text) =>
     `<div class="lev"><span class="lname">${r.label}</span>` +
-    `<span class="lband">±${eur(r.band)} ${r.unit}</span>` +
+    // Entweder-oder-Felder haben kein Band; „±— " war schlicht kaputt
+    `<span class="lband">${r.choiceLabel ?? `±${eur(r.band)} ${r.unit}`}</span>` +
     `<span class="lbar"><i style="width:${(value / max) * 100}%"></i></span>` +
     `<span class="lval">${text}</span></div>`;
 
+  /* Achtzehn Balken, von denen zehn zwischen einem und vier Monaten liegen und optisch
+     nicht unterscheidbar sind, tragen ab Rang sieben nichts mehr bei. Der Rest bleibt
+     erreichbar, steht aber nicht mehr im Weg. */
+  const SICHTBAR = 6;
+  const kurz = movers.slice(0, SICHTBAR);
+  const rest = movers.slice(SICHTBAR);
+  const zeile = (r) =>
+    bar(
+      r,
+      r.move ?? maxMove,
+      maxMove,
+      r.move == null ? "kippt" : byCredit ? eur(r.move) + " €" : r.move + " Mon.",
+    );
   el("levers").innerHTML = movers.length
-    ? movers
-        .map((r) =>
-          bar(
-            r,
-            r.move ?? maxMove,
-            maxMove,
-            r.move == null
-              ? "kippt"
-              : byCredit
-                ? eur(r.move) + " €"
-                : r.move + " Mon.",
-          ),
-        )
-        .join("")
+    ? kurz.map(zeile).join("") +
+      (rest.length
+        ? `<details class="levrest"><summary>${plural(rest.length, "weiterer Posten", "weitere Posten")} mit unter ${rest[0].move + 1} ${byCredit ? "€" : "Monaten"} Wirkung</summary>${rest.map(zeile).join("")}</details>`
+        : "")
     : `<div class="empty">Kein Regler bewegt ${byCredit ? "die Kreditsumme" : "den Termin"} messbar.</div>`;
 
   // Die laufenden Kosten des R34 fallen erst ab dem Kaufmonat an. Auf den Termin wirken sie
@@ -955,11 +1060,34 @@ function wireTrackButtons(pts, plan) {
 }
 
 /* ---- Nächste Schritte ---- */
+/** Was die Aufgabe bringt — gemessen, wenn möglich, sonst der Satz aus dem Katalog.
+ *
+ *  Die handgeschriebene Begründung war eine Behauptung („ist der größte Hebel").
+ *  Die Messung sagt, wie viel Unsicherheit tatsächlich verschwindet, und rechtfertigt
+ *  damit den Aufwand daneben. Zahlen ohne Wirkung auf den Termin verengen trotzdem den
+ *  Spielraum danach — das muss dranstehen, sonst liest man „0" als „sinnlos". */
+function taskGainText(t) {
+  const g = (runtime.taskGain || {})[t.id];
+  if (!g) return t.gain();
+  if (g.months > 0)
+    return `<b>Spanne −${g.months} ${g.months === 1 ? "Monat" : "Monate"}</b> · ${t.gain()}`;
+  if (g.spare > 0)
+    return `<b>Spielraum danach ±${eur(g.spare)} € genauer</b> · ${t.gain()}`;
+  return t.gain();
+}
+
 function renderTasks() {
   const box = el("tasks");
   const sum = el("tasksSum");
   if (!box) return;
-  const open = openTasks();
+  /* Nach gemessener Wirkung sortiert, nicht nach Reihenfolge im Katalog. Was noch
+     nicht gemessen ist, bleibt an seinem Platz — die Zahlen tröpfeln nach. */
+  const gain = runtime.taskGain || {};
+  const rank = (t) => {
+    const g = gain[t.id];
+    return g ? g.months * 100 + (g.spare ?? 0) : -1;
+  };
+  const open = openTasks().sort((a, b) => rank(b) - rank(a));
   if (sum)
     sum.textContent = open.length ? `${open.length} offen` : "nichts offen";
 
@@ -973,7 +1101,7 @@ function renderTasks() {
       (t) =>
         `<div class="task"><button type="button" class="tcheck" data-task="${t.id}" aria-label="erledigt">○</button>` +
         `<div class="tbody"><div class="ttext">${t.text}<span class="teffort">${t.effort}</span></div>` +
-        `<div class="tgain">${t.gain()}</div></div>` +
+        `<div class="tgain">${taskGainText(t)}</div></div>` +
         `<button type="button" class="tjump" data-jump="${t.jump}">hin →</button></div>`,
     )
     .join("");
@@ -1223,7 +1351,12 @@ function fundsTableHTML(s, r) {
 
   const inflow = [
     ["Startkapital heute", s.cap],
-    [`angewiesen bis ${dat(r.r34Month)}`, r.savedTotal],
+    [
+      r.oneOffs.licence > 0
+        ? `angewiesen bis ${dat(r.r34Month)}, nach Fahrschule`
+        : `angewiesen bis ${dat(r.r34Month)}`,
+      r.savedTotal,
+    ],
     ["Zinsen auf das Tagesgeld", r.interestEarned],
   ];
   /* Der Dauerauftrag weist an, das laufende Konto holt sich zurück, was es zum Leben
@@ -1233,7 +1366,6 @@ function fundsTableHTML(s, r) {
     inflow.push(["davon ans laufende Konto zurück", -r.giroCover]);
   else if (Math.round(r.giroCover) < 0)
     inflow.push(["vom laufenden Konto vorgestreckt", -r.giroCover]);
-  if (r.preBuy.licence) inflow.push(["Führerschein", -r.preBuy.licence]);
   if (r.preBuy.daily)
     inflow.push(["Alltagsauto inkl. Nebenkosten", -r.preBuy.daily]);
   const sum = inflow.reduce((a, [, v]) => a + v, 0);
@@ -1301,13 +1433,23 @@ function savingPhasesHTML(s, r) {
   if (!marks.length)
     return `Heute bleiben ${eur(s.netNow - s.living)} € übrig. Sobald ein Kauftermin zustande kommt, steht hier der Verlauf.`;
 
+  /* Alle drei Spalten auf derselben Grundlage, damit die Zeile nachrechenbar ist:
+     übrig − aufs Tagesgeld = zum Leben, immer. Vorher stand in der mittleren Spalte der
+     Stand NACH dem Ausgleich und rechts die Differenz DAVOR — 660 − 660 ergab dann −40,
+     und eine Tabelle, die sich nicht aufaddieren lässt, wirkt kaputt, auch wenn jede
+     Zahl für sich stimmt. Was der Ausgleich zurückholt, steht als Hinweis dahinter. */
   const rows = marks
     .map((x) => {
-      const tight = x.save > x.net + 1;
+      const free = x.flow - x.save;
+      const zurueck = x.save - x.net;
       return (
-        `<tr class="${tight ? "neg" : ""}"><td>${x.label}</td>` +
-        `<td>${eur(x.flow)} €</td><td>${eur(x.net)} €</td>` +
-        `<td>${tight ? "angewiesen " + eur(x.save) + " €, davon " + eur(x.save - x.net) + " € zurückgeholt" : ""}</td></tr>`
+        `<tr class="${free < 0 ? "neg" : ""}"><td>${x.label}</td>` +
+        `<td>${eur(x.flow)} €</td><td>${eur(x.save)} €</td>` +
+        `<td>${eur(free)} €${
+          zurueck > 1
+            ? ` <span class="mute">davon ${eur(zurueck)} € vom Tagesgeld</span>`
+            : ""
+        }</td></tr>`
       );
     })
     .join("");
@@ -1321,10 +1463,11 @@ function savingPhasesHTML(s, r) {
     : 0;
   return (
     `<div class="cmpwrap"><table class="cmp phases"><thead><tr>` +
-    `<th>Zeitpunkt</th><th>übrig</th><th>bleibt liegen</th><th></th></tr></thead>` +
+    `<th>Zeitpunkt</th><th>übrig</th><th>aufs Tagesgeld</th><th>zum Leben</th></tr></thead>` +
     `<tbody>${rows}` +
-    `<tr class="sumline"><td>Durchschnitt bis ${dat(r.r34Month)}</td><td></td>` +
-    `<td>${eur(avg)} €</td><td></td></tr></tbody></table></div>` +
+    `<tr class="sumline"><td>Durchschnitt bis ${dat(r.r34Month)}</td>` +
+    `<td>${eur(avg + (r.freeAvg ?? 0))} €</td><td>${eur(avg)} €</td>` +
+    `<td>${eur(r.freeAvg ?? 0)} €</td></tr></tbody></table></div>` +
     (s.saveMode === "fixed"
       ? `<span class="warn">Der Dauerauftrag von ${eur(s.saveFixed)} € läuft unverändert weiter, auch wenn nach dem Kauf des Alltagsautos weniger übrig bleibt. Was fehlt, holt sich das Modell vom Tagesgeld zurück.` +
         /* Liegt der Dauerauftrag dauerhaft über dem, was übrig bleibt, hebt der
@@ -1539,7 +1682,48 @@ function scheduleHeavy() {
     if (state.method === "rest") renderRestCompare(runtime.lastRun);
     renderTrack(runtime.lastRun);
     renderTasks();
+    scheduleForecast();
   }, HEAVY_DEBOUNCE_MS);
+}
+
+let forecastTimer = null;
+/** Ein paar hundert vollständige Simulationen kosten mehr als der gesamte übrige
+ *  Renderlauf. Sie laufen deshalb erst, wenn eine Weile nichts mehr passiert ist —
+ *  bis dahin steht die Spanne aus der Faustformel. */
+function scheduleForecast() {
+  clearTimeout(forecastTimer);
+  forecastTimer = setTimeout(() => {
+    forecastTimer = null;
+    if (!runtime.lastRun || runtime.lastRun.r34Month == null) return;
+    runtime.lastForecast = forecast(state);
+    renderSpread(runtime.lastRun, runtime.lastSpread);
+    measureTaskGains();
+  }, FORECAST_DEBOUNCE_MS);
+}
+
+/** Was jede offene Aufgabe an Unsicherheit wegnimmt — eine Messung je Durchgang.
+ *
+ *  Nacheinander statt am Stück: eine Aufgabe kostet rund 30 ms, sechs am Stück wären
+ *  ein spürbarer Hänger. So gibt der Hauptthread zwischendurch ab, und die Zahlen
+ *  tröpfeln in die Liste. */
+function measureTaskGains() {
+  const offen = openTasks().filter((t) => t.proves);
+  runtime.taskGain = runtime.taskGain || {};
+  let i = 0;
+  const step = () => {
+    if (i >= offen.length) {
+      renderTasks();
+      return;
+    }
+    const t = offen[i++];
+    try {
+      runtime.taskGain[t.id] = narrowingBy(state, t.proves);
+    } catch {
+      runtime.taskGain[t.id] = null;
+    }
+    setTimeout(step, 0);
+  };
+  step();
 }
 
 function render() {
@@ -1564,13 +1748,13 @@ function render() {
 /** Die Zusammenfassung einer Gruppe braucht Laufzeitzustand und steht deshalb hier
  *  statt im Katalog — das hält catalog.js frei von Abhängigkeiten. */
 const GROUP_SUMMARIES = {
+  frame: (s) =>
+    `R34 ab ${fmtYm(s.startYm)} · ${eur(s.reserve)} € Rücklage`,
   facts: (s) =>
-    `${eur(s.netNow)} € netto · ${eur(s.living)} € Lebenshaltung · ` +
-    (s.licenseOwned ? "Schein da" : "Schein " + dat(licenceMonth(s))),
+    (s.licenseOwned ? "Schein da" : "Schein " + dat(licenceMonth(s))) +
+    ` · ${plural(ledgers.income.length, "Gehaltsschritt", "Gehaltsschritte")}`,
   saving: (s) =>
-    s.saveMode === "fixed"
-      ? `${eur(s.saveFixed)} €/M fest + ${num(s.saveSurplus, 0)} % Überschuss`
-      : "alles Übrige aufs Tagesgeld",
+    `${num(s.saveRate, 2)} % Tagesgeld · ${num(s.inflCost, 1)} % Inflation`,
   body: () => {
     const n = ledgers.price.length;
     return n

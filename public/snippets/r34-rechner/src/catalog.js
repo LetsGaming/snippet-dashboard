@@ -20,100 +20,142 @@ import { fmtYm } from "./calendar.js";
    — eine Quelle, drei Anzeigen.
    ============================================================ */
 
+/* Die Felder, die den Termin am stärksten bewegen — gemessen, nicht vermutet.
+   Vorher standen hier Termine und Nebenpreise, während Netto, Lebenshaltung und
+   Dauerauftrag im zugeklappten Bereich lagen: zusammen über 50 Monate Wirkung
+   hinter einer Zusammenfassung, die "alles vorbelegt" behauptete.
+
+   Die Reihenfolge steht fest und wird nicht aus der laufenden Messung abgeleitet.
+   Sonst springen die Felder beim Tippen umher, sobald sich die Rangfolge ändert. */
 const STEER = [
+    {
+      key: "netNow",
+      label: "Netto heute",
+      unit: "€/M",
+      def: 1903,
+      band: 150,
+      help: "netNow",
+      prov: "guess",
+    },
+    {
+      key: "living",
+      label: "Lebenshaltung ohne Auto",
+      unit: "€/M",
+      def: 950,
+      band: 150,
+      help: "living",
+      prov: "guess",
+    },
+    {
+      type: "seg",
+      key: "saveMode",
+      label: "Sparweise",
+      def: "fixed",
+      help: "saveMode",
+      prov: "preset",
+      opts: [
+        {
+          v: "fixed",
+          label: "Dauerauftrag",
+          tip: "Fester Betrag im Monat, Überschuss anteilig dazu",
+        },
+        {
+          v: "auto",
+          label: "alles Übrige",
+          tip: "Was am Monatsende übrig ist, wandert komplett aufs Tagesgeld",
+        },
+      ],
+    },
+    {
+      key: "saveFixed",
+      label: "Dauerauftrag",
+      unit: "€/M",
+      def: 700,
+      band: 200,
+      showWhen: (s) => s.saveMode === "fixed",
+      help: "saveMode",
+      prov: "preset",
+    },
+    {
+      key: "saveSurplus",
+      min: 0,
+      max: 100,
+      label: "davon Überschuss",
+      unit: "%",
+      def: 50,
+      band: 25,
+      showWhen: (s) => s.saveMode === "fixed",
+      help: "saveSurplus",
+      prov: "preset",
+    },
   {
     key: "car",
     label: "Kaufpreis R34",
     unit: "€",
     def: 28500,
     band: 4000,
+    min: 0,
     help: "car",
-    prov: "guess",
-    pair: "startYm",
-  },
-  {
-    type: "month",
-    key: "startYm",
-    label: "R34 frühestens ab",
-    def: "2028-06",
-    band: 6,
-    bandUnit: "Mon.",
-    help: "r34start",
-    prov: "calc",
-  },
-  {
-    key: "dailyPrice",
-    label: "Kaufpreis Alltagsauto",
-    unit: "€",
-    def: 3000,
-    band: 1000,
-    help: "price",
-    prov: "guess",
-    pair: "dailyYm",
-  },
-  {
-    type: "month",
-    key: "dailyYm",
-    label: "Alltagsauto frühestens ab",
-    def: "2026-11",
-    band: 6,
-    bandUnit: "Mon.",
-    help: "dailystart",
-    prov: "calc",
-  },
-  {
-    key: "reserve",
-    label: "Rücklage nach dem Kauf",
-    unit: "€",
-    def: 4000,
-    band: 1500,
-    help: "reserve",
     prov: "guess",
   },
 ];
 
 const GROUPS = [
   {
+    id: "frame",
+    title: "Termine & Rahmen",
+    hint: "Wann frühestens, und was liegen bleibt",
+    effect: "date",
+    fields: [
+      {
+        type: "month",
+        key: "startYm",
+        label: "R34 frühestens ab",
+        def: "2028-06",
+        band: 6,
+        bandUnit: "Mon.",
+        help: "r34start",
+        prov: "calc",
+      },
+      {
+        type: "month",
+        key: "dailyYm",
+        label: "Alltagsauto frühestens ab",
+        def: "2026-11",
+        band: 6,
+        bandUnit: "Mon.",
+        help: "dailystart",
+        prov: "calc",
+      },
+      {
+        key: "dailyPrice",
+        label: "Kaufpreis Alltagsauto",
+        unit: "€",
+        def: 3000,
+        band: 1000,
+        min: 0,
+        help: "price",
+        prov: "guess",
+      },
+      {
+        key: "reserve",
+        label: "Rücklage nach dem Kauf",
+        unit: "€",
+        def: 4000,
+        band: 1500,
+        min: 0,
+        help: "reserve",
+        prov: "guess",
+      },
+    ],
+  },
+  {
     id: "facts",
     title: "Deine Fakten",
     hint: "Einmal eintragen, dann stimmt der Rest",
     effect: "date",
+    ledger: "income",
     fields: [
-      {
-        key: "netNow",
-        label: "Netto heute",
-        unit: "€/M",
-        def: 1903,
-        band: 150,
-        help: "netNow",
-        prov: "guess",
-      },
-      {
-        key: "netAfter",
-        label: "Netto nach der Erhöhung",
-        unit: "€/M",
-        def: 2246,
-        band: 200,
-        help: "netAfter",
-        prov: "guess",
-      },
-      {
-        type: "month",
-        key: "raiseYm",
-        label: "Erhöhung ab",
-        def: "2027-07",
-        help: "raiseYm",
-        prov: "guess",
-      },
-      {
-        key: "living",
-        label: "Lebenshaltung ohne Auto",
-        unit: "€/M",
-        def: 950,
-        band: 150,
-        help: "living",
-        prov: "guess",
-      },
       {
         type: "month",
         key: "birth",
@@ -154,6 +196,21 @@ const GROUPS = [
         unit: "€",
         def: 3500,
         band: 700,
+        min: 0,
+        hideIf: "licenseOwned",
+        help: "licence",
+        prov: "guess",
+      },
+      {
+        /* Eine Fahrschule schickt keine Schlussrechnung, sondern Grundgebühr,
+           Fahrstunden und Prüfungsgebühren über die ganze Ausbildungszeit. Als
+           Einmalbetrag gerechnet zeigt der Plan davor einen zu hohen Kontostand. */
+        key: "licenceMonths",
+        label: "Fahrschule läuft über",
+        unit: "Mon.",
+        def: 8,
+        min: 1,
+        max: 36,
         hideIf: "licenseOwned",
         help: "licence",
         prov: "guess",
@@ -168,48 +225,6 @@ const GROUPS = [
     effect: "date",
     derived: "saving",
     fields: [
-      {
-        type: "seg",
-        key: "saveMode",
-        label: "Sparweise",
-        def: "fixed",
-        help: "saveMode",
-        prov: "preset",
-        opts: [
-          {
-            v: "fixed",
-            label: "Dauerauftrag",
-            tip: "Fester Betrag im Monat, Überschuss anteilig dazu",
-          },
-          {
-            v: "auto",
-            label: "alles Übrige",
-            tip: "Was am Monatsende übrig ist, wandert komplett aufs Tagesgeld",
-          },
-        ],
-      },
-      {
-        key: "saveFixed",
-        label: "Dauerauftrag",
-        unit: "€/M",
-        def: 700,
-        band: 200,
-        showWhen: (s) => s.saveMode === "fixed",
-        help: "saveMode",
-        prov: "preset",
-      },
-      {
-        key: "saveSurplus",
-        min: 0,
-        max: 100,
-        label: "davon Überschuss",
-        unit: "%",
-        def: 50,
-        band: 25,
-        showWhen: (s) => s.saveMode === "fixed",
-        help: "saveSurplus",
-        prov: "preset",
-      },
       {
         key: "saveRate",
         min: 0,
@@ -259,7 +274,8 @@ const GROUPS = [
         label: "Super E5",
         unit: "€/l",
         def: 2.29,
-        ro: true,
+        min: 0.5,
+        max: 5,
         help: "fuelGrade",
         prov: "guess",
       },
@@ -268,7 +284,8 @@ const GROUPS = [
         label: "Super E10",
         unit: "€/l",
         def: 2.24,
-        ro: true,
+        min: 0.5,
+        max: 5,
         help: "fuelGrade",
         prov: "guess",
       },
@@ -277,7 +294,8 @@ const GROUPS = [
         label: "Diesel",
         unit: "€/l",
         def: 2.27,
-        ro: true,
+        min: 0.5,
+        max: 5,
         help: "fuelGrade",
         prov: "guess",
       },
@@ -327,7 +345,7 @@ const GROUPS = [
       },
       {
         key: "r34Extra",
-        label: "Nebenkosten Kauf",
+        label: "Nebenkosten R34-Kauf",
         unit: "€",
         def: 1500,
         band: 700,
@@ -424,6 +442,8 @@ const GROUPS = [
         // Wechsel klappt, ist eine Annahme und gehört in den Korridor.
         choices: [true, false],
         choiceLabel: "Tarif kommt ↔ kommt nicht",
+        // Klassikertarife setzen Garage, Zweitwagen und Zustandsnote voraus
+        choiceRisk: 0.25,
       },
       {
         type: "toggle",
@@ -439,6 +459,8 @@ const GROUPS = [
         // den Korridor. Ohne H bleibt es dauerhaft beim reguläreren Tarif.
         choices: [true, false],
         choiceLabel: "mit ↔ ohne H",
+        // Gutachten kann scheitern: Zustand, Umbauten, fehlende Papiere
+        choiceRisk: 0.15,
       },
       {
         type: "toggle",
@@ -596,6 +618,8 @@ const GROUPS = [
         // gegen 25 × 25,36 = 634 €/J. Bis zum H-Kennzeichen wirkt das voll.
         choices: ["Euro 2", "ohne Einstufung"],
         choiceLabel: "Euro 2 ↔ ohne Einstufung",
+        // Ein JDM-Import ohne europäische Einstufung ist eher die Regel
+        choiceRisk: 0.6,
         opts: NORMS.map((v) => ({
           v,
           tip: `${num(TAX.perUnitPre2009.otto[v])} € je angefangene 100 cm³`,
@@ -614,7 +638,9 @@ const GROUPS = [
     fields: [
       {
         key: "dailyExtra",
-        label: "Nebenkosten Kauf",
+        // Beide Fahrzeuge hatten „Nebenkosten Kauf" — in der Hebelliste standen sie
+        // zweimal untereinander und waren nicht auseinanderzuhalten.
+        label: "Nebenkosten Alltagsauto",
         unit: "€",
         def: 600,
         band: 300,
@@ -907,6 +933,21 @@ const LEDGERS = {
     value: (r) => r.amt,
     empty:
       "Noch kein Angebot erfasst — es rechnet mit dem Schätzwert der Variante.",
+  },
+  income: {
+    title: "Bekannte Gehaltsschritte",
+    help: "income",
+    cols: [
+      { key: "month", type: "month" },
+      { key: "amt", ph: "Netto in €", type: "number" },
+      { key: "src", ph: "Anlass, z. B. 3. Lehrjahr", type: "text" },
+    ],
+    label: (r) => `ab ${fmtYm(r.month)}`,
+    meta: (r) => r.src || "Gehaltsschritt",
+    value: (r) => r.amt,
+    valid: (r) => idxFromYm(r.month) != null && isFinite(r.amt) && r.amt > 0,
+    empty:
+      "Keine Schritte erfasst — gerechnet wird mit dem heutigen Netto und der allgemeinen Lohnentwicklung.",
   },
   actual: {
     title: "Stand Tagesgeldkonto, jeweils zum Monatsende",

@@ -11,6 +11,7 @@ const DONE_HIDE_DAYS = 30;
 const TASKS = [
   {
     id: "priceLedger",
+    proves: ["car"],
     text: "Fünf Inserate für die gewählte Karosserie erfassen",
     effort: "20 Min.",
     when: () => priceFromLedger() == null || priceFromLedger().n < 5,
@@ -24,6 +25,7 @@ const TASKS = [
   },
   {
     id: "livingProof",
+    proves: ["living"],
     text: "Lebenshaltung aus echten Kontoständen ableiten",
     effort: "5 Min. im Monat",
     when: () => prov.living === "guess",
@@ -46,6 +48,7 @@ const TASKS = [
   },
   {
     id: "insR34",
+    proves: ["r34InsY"],
     text: "Versicherungsangebot für den R34 einholen",
     effort: "30 Min.",
     when: () => prov.r34InsY !== "proof",
@@ -55,6 +58,7 @@ const TASKS = [
   },
   {
     id: "insDaily",
+    proves: ["dailyInsY"],
     text: "Versicherungsangebot fürs Alltagsauto einholen",
     effort: "20 Min.",
     when: () => prov.dailyInsY !== "proof",
@@ -64,14 +68,16 @@ const TASKS = [
   },
   {
     id: "netProof",
+    proves: ["netNow"],
     text: "Netto aus der letzten Abrechnung übernehmen",
     effort: "2 Min.",
-    when: () => prov.netNow === "guess" || prov.netAfter === "guess",
+    when: () => prov.netNow === "guess" || !ledgers.income.length,
     gain: () => "Zweitstärkster Hebel nach der Lebenshaltung",
     jump: "grp_facts",
   },
   {
     id: "licence",
+    proves: ["licence"],
     text: "Zwei Fahrschulangebote vergleichen",
     effort: "20 Min.",
     when: () => !state.licenseOwned && prov.licence === "guess",

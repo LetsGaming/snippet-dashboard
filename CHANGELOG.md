@@ -6,6 +6,156 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **R34-Rechner: weniger Fläche, gleiche Information.** Ein Hilfetext bekommt je Bereich
+  einen Knopf statt einen pro Feld — „Fahrleistung", „Verbrauch", „Kraftstoff" und die
+  drei Spritpreise zeigten alle denselben Text. Von 65 Fragezeichen an Feldern waren 27
+  Wiederholungen. Der Dauerrahmen der Knöpfe ist weg; er kommt bei Hover und Fokus.
+- **Abgeleitete Kästen sehen nicht mehr aus wie Meldungen.** Akzentfarbe auf Akzentfläche
+  las sich als Hinweis — drei davon untereinander als drei Warnungen. Jetzt eine ruhige
+  Fläche; Farbe bleibt den echten Meldungen vorbehalten.
+- **„Bis dahin frei" wird eingeordnet wie „Danach frei".** Eine Zahl ohne Etikett neben
+  einer mit Etikett liest sich, als sei die eine wichtig und die andere nicht. Ein Minus
+  während der Fahrschulzeit heißt „vorübergehend", nicht „kritisch" — es ist kein
+  kaputter Plan, sondern eine Phase.
+
+### Fixed
+- **R34-Rechner: das Ergebnis widersprach sich selbst.** Überschrift „R34 ab 10/2031" und
+  Spannen-Mitte „07/2032" standen acht Zentimeter auseinander, beide unkommentiert als
+  Antwort. Beide Zahlen waren richtig — die eine nimmt die Eingaben wörtlich, die andere
+  ist der Median der gezogenen Durchläufe —, aber nebeneinander lesen sie sich als „der
+  Rechner weiß es selbst nicht". Es gibt jetzt eine Antwort: deine Zahlen. Die Mitte steht
+  darunter als Erklärung des Abstands, mit Grund.
+- **Das Spannen-Modal erklärte die falsche Methode.** Der Text beschrieb noch die
+  quadratische Addition, während oben längst gezogene Quantile stehen. Wer das Modal
+  öffnet, um Vertrauen zu gewinnen, las eine Erklärung, die nicht zu den Zahlen passte.
+- **Drei Panels standen außerhalb des Seitencontainers.** `.wrap` wurde beim Herausziehen
+  des Sicherungs-Panels zu früh geschlossen; „Plan sichern", „Nächste Schritte" und
+  „Datenquellen" liefen dadurch über die volle Fensterbreite.
+- **Der Sparverlauf ließ sich nicht nachrechnen.** Die mittlere Spalte zeigte den Stand
+  nach dem Ausgleich, die rechte die Differenz davor — 660 − 660 ergab dann −40. Alle drei
+  Spalten stehen jetzt auf derselben Grundlage; was der Ausgleich zurückholt, steht als
+  Hinweis dahinter.
+- **`±—` als Bandbreite** bei Entweder-oder-Feldern in der Hebelliste.
+- **„Nebenkosten Kauf" stand zweimal** in der Hebelliste, für beide Fahrzeuge identisch
+  beschriftet und nicht auseinanderzuhalten.
+
+### Added
+- **Karte „Aufs Tagesgeld" im Ergebnis.** Was im Schnitt monatlich liegen bleibt, plus die
+  Kette dahinter: angewiesen X, davon Y zurückgeholt. Diese Zahl war über vier Stellen
+  verteilt und an keiner vollständig — die Stellschrauben zeigen den Dauerauftrag, also
+  die Anweisung, nicht den Zufluss.
+
+### Changed
+- Die Hebelliste zeigt sechs Posten; die restlichen elf liegen hinter einem Aufklapper.
+  Achtzehn Balken, von denen zehn zwischen einem und vier Monaten lagen, waren optisch
+  nicht unterscheidbar.
+- Das Gruppen-Etikett „wirkt auf den Termin" ist weg — es stand auf sechs von sieben
+  Gruppen. Beschriftet wird nur noch die Ausnahme.
+
+### Fixed
+- **R34-Rechner: ein früher Führerschein machte den Plan reicher.** Die Fahrschulraten
+  gingen bis dahin als Griff ins Tagesgeld ab. Lag dort noch nichts — und in den ersten
+  Monaten liegt dort nichts —, landeten sie auf dem laufenden Konto und wurden von dort
+  aus dem Haushaltsüberschuss getilgt, der sonst als verbraucht gilt. Ein früher Schein
+  war dadurch im Modell billiger als ein später: das Kapital verlief U-förmig statt
+  monoton, mit 534 € Unterschied zwischen früh und mittel. Am Kauftermin schlug das je
+  nach Schwelle mal als +1, mal als −1 Monat durch.
+  Die Fahrschule läuft jetzt über die Monatskosten — realistischer, weil niemand für
+  Fahrstunden monatlich vom Sparkonto abhebt, und ohne die Asymmetrie. Reicht der Monat
+  nicht, holt sich der Ausgleich den Rest weiterhin vom Tagesgeld, nur eben sichtbar.
+  Ein Test hält fest, dass später bezahlen nie weniger übrig lässt.
+- „Bis dahin frei" nennt jetzt die Fahrschule als Ursache, wenn der engste Monat in die
+  Ausbildungszeit fällt — vorher stand dort pauschal „Dauerauftrag zu hoch".
+
+### Changed
+- **R34-Rechner: die Stellschrauben zeigen jetzt die stärksten Hebel.** Oben standen
+  Termine und Nebenpreise, während Netto heute (22 Mon.), Lebenshaltung (22 Mon.) und
+  Dauerauftrag (12 Mon.) im zugeklappten Bereich lagen — hinter einer Zusammenfassung,
+  die „alles vorbelegt" behauptete. Die App hat diese Rangfolge über die Wirkungs-Chips
+  selbst gemessen und im Layout ignoriert. Neu oben: Netto, Lebenshaltung, Sparweise mit
+  Dauerauftrag, Kaufpreis R34. Termine, Alltagsauto-Preis und Rücklage wandern in eine
+  neue Gruppe „Termine & Rahmen".
+  Die Reihenfolge steht fest und wird nicht aus der laufenden Messung abgeleitet: sonst
+  springen die Felder beim Tippen umher.
+- Dauerauftrag und Überschussanteil verschwinden, wenn die Sparweise „alles Übrige" ist.
+- **Der Nutzen jeder Aufgabe wird gemessen statt behauptet.** Statt „ist der größte
+  Hebel" steht dort, um wie viele Monate die Spanne schrumpft, wenn die Zahl belegt
+  wäre — ermittelt über zwei Vorschauläufe mit umgesetzter Herkunft. Die Liste sortiert
+  sich danach. Zahlen, die den Termin nicht bewegen, weisen stattdessen aus, wie viel
+  genauer der Spielraum nach dem Kauf wird; „0 Monate" hätte sonst als „sinnlos" gelesen
+  werden können. Gerechnet wird eine Aufgabe je Durchgang, damit nichts hängt.
+
+### Added
+- **R34-Rechner: die Spanne kommt aus einer gezogenen Verteilung statt aus einer
+  Faustformel.** Bisher wurde jeder Regler einzeln gekippt und die Ausschläge quadratisch
+  addiert. Das unterstellte Unabhängigkeit (Lebenshaltung, Wartung, Versicherung und
+  Sprit hängen aber alle an derselben Inflation), Symmetrie (eine Reparatur kann das
+  Fünffache kosten, aber nie weniger als nichts) und kannte keine Ereignisse. Jetzt
+  ziehen ein paar hundert vollständige Durchläufe: ein Schock je Risikogruppe, ein
+  eigener je Feld, Kostenfelder multiplikativ, dazu große Reparatur (10 %/Jahr),
+  zeitweiser Einkommensausfall (3 %/Jahr) und die Entweder-oder-Fragen mit eigener
+  Wahrscheinlichkeit. Angezeigt sind das 10-, 50- und 90-Prozent-Quantil plus die
+  Anteile „reicht gar nicht" und „danach unter 100 €/M".
+  Der Zufall ist gesetzt, damit dieselbe Eingabe dieselbe Anzeige ergibt; gerechnet wird
+  in einem eigenen, längeren Takt nach dem übrigen Render.
+- Die Simulation nimmt Einmalschocks (`events`) und ein Fenster mit gekürztem Netto
+  (`incomeGap`) entgegen.
+
+### Changed
+- **Spritpreise sind jetzt Eingabefelder.** Die bisherige Quelle war in keiner
+  beobachteten Sitzung erreichbar. Eine Quelle, die dauerhaft „offline" meldet, ist
+  schlechter als keine — und was du zuletzt getankt hast, ist für deine Rechnung
+  ohnehin genauer als ein Bundesdurchschnitt.
+
+### Fixed
+- **Pläne aus Fassung 2 gingen beim Wechsel verloren.** Der Loader las nur `v4` und
+  `v3`. Ein `v2`-Eintrag kennt weder Fassungsfeld noch `ui`-Abschnitt und wurde von der
+  Prüfung als „kein Plan dieses Rechners" abgewiesen — der ganze Plan verschwand
+  stillschweigend. Er wird jetzt beim Lesen in die heutige Form gebracht.
+
+### Added
+- **R34-Rechner: Gehaltsentwicklung als Liste statt als einzelner Sprung.** Das Feldpaar
+  „Netto nach der Erhöhung" plus „Erhöhung ab" konnte genau eine Änderung abbilden. Wer
+  im zweiten Lehrjahr schon weiß, was das dritte bringt, oder in vier Monaten den
+  Arbeitgeber wechselt, konnte das nicht eintragen. Jetzt ein Beleg „Bekannte
+  Gehaltsschritte" mit beliebig vielen Zeilen aus Monat, Netto und Anlass.
+  Zwischen zwei erfassten Schritten gilt der erfasste Betrag — er enthält die Erhöhung
+  ja bereits. Erst hinter dem letzten Schritt greift die allgemeine Lohnentwicklung;
+  vorher schlug sie auf Zahlen auf, die aus dem Vertrag stammen. Schritte in der
+  Vergangenheit werden auf den laufenden Monat gezogen statt zu verschwinden.
+  Der Korridor-Hebel wandert von „Netto nach der Erhöhung" auf eine prozentuale
+  Verschiebung der ganzen künftigen Reihe.
+
+### Fixed
+- **R34-Rechner: das laufende Konto gab Geld zweimal aus.** Der Rest, der laut Annahme
+  als verbraucht gilt, wuchs mechanisch weiter und deckte später Fehlmonate ab, statt
+  dass der Ausgleich vom Tagesgeld griff. Dasselbe Geld zählte einmal als verbraucht und
+  einmal als Sparrate. Der Stand wird jetzt am Monatsende geleert; ein negativer bleibt
+  stehen. Finanziell klein (rund 220 € über die Sparphase), logisch aber ein Widerspruch
+  zur eigenen Annahme — und er wächst mit der Höhe des Dauerauftrags.
+- **R34-Rechner: der Führerschein fiel als ein Betrag in einem Monat an.** Eine
+  Fahrschule schickt keine Schlussrechnung — Grundgebühr, Fahrstunden und Prüfungs-
+  gebühren verteilen sich über die Ausbildungszeit. Als Einmalbetrag gerechnet wies der
+  Plan in den Monaten davor einen Kontostand aus, den es so nie gab: bei den Vorgaben
+  3.308 € statt realistischer 1.000 €. Neues Feld „Fahrschule läuft über" (Vorgabe acht
+  Monate); die Summe bleibt gleich und endet mit dem Prüfungstermin. Ist bis dahin
+  weniger Zeit als die angesetzte Dauer, wird sie auf die verbleibenden Monate gedrängt
+  statt gekürzt.
+- **Ein Prüfungstermin in der Vergangenheit ließ die Zahlung ganz ausfallen**, weil die
+  Bedingung auf `m === licM` stand und die Schleife bei null beginnt.
+
+### Added
+- **R34-Rechner: „Bis dahin frei".** Was während der Sparphase im Monat zum Leben
+  bleibt — Netto minus Lebenshaltung, Unterhalt und Dauerauftrag. Diese Zahl gab es
+  bisher nur für die Zeit *nach* dem Kauf, dabei ist die Sparphase die längere. Sie
+  steht jetzt als eigene Karte im Ergebnis und als Spalte im Sparverlauf.
+  Führerschein und Autokauf zählen dabei nicht mit: sie kommen aus dem Ersparten und
+  sind kein Haushaltsgeld, sonst wiese ausgerechnet der Monat einer Fahrschulrate mehr
+  Spielraum aus.
+  Ist die Zahl negativ, liegt der Dauerauftrag über dem, was der Monat hergibt — bei
+  den Vorgabewerten ist das ab dem Kauf des Alltagsautos der Fall (−76 €).
+
 ### Fixed
 - **Snippets durften keine Dateien herausgeben.** Der Standard-Sandbox für gebündelte
   Snippets listete `allow-downloads` nicht auf. Ein Snippet konnte damit eine Blob-URL
@@ -121,6 +271,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Obergrenze, ab der ein höherer Dauerauftrag den Termin nicht mehr bewegt.
 - Das Import-Panel weist darauf hin, dass §21 und Zulassung bereits im Landepreis
   stecken und die „Nebenkosten Kauf" im Plan trotzdem dazukommen.
+- `SNAPSHOT_VERSION` auf 8. Das alte Feldpaar für die Gehaltserhöhung wird beim
+  Einlesen in die Schrittliste gehoben.
 - `SNAPSHOT_VERSION` auf 7. Das Feld `manual` heißt jetzt `values` und enthält auch
   belegte Werte; `manual` bleibt als Zweitname stehen, damit ältere Exporte lesbar sind.
 - `SNAPSHOT_VERSION` auf 6. Der Speicherschlüssel bleibt `r34planer:v4`, die Form ist

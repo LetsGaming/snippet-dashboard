@@ -11,6 +11,7 @@ import { ledgers, doneTasks } from "./ledgers.js";
 const UI_KEYS = [
   "cap",
   "appr",
+  "incomeShift",
   "strat",
   "method",
   "restGoal",
@@ -22,6 +23,10 @@ const UI_KEYS = [
 const state = {
   cap: 0,
   appr: 4,
+  /* Prozentuale Verschiebung aller bekannten künftigen Gehaltsschritte. Trägt die
+     Unsicherheit der Einkommensreihe im Korridor; das heutige Netto bleibt außen vor,
+     das hat sein eigenes Band. */
+  incomeShift: 0,
   strat: "dailyfirst",
   method: "cash",
   restGoal: "date",
@@ -55,7 +60,33 @@ const age25Month = (s) => monthsAfterYm(s.birth, AGE_CLASSIC_INSURANCE) ?? NEVER
  *  Kauftermin im Jahr 85359 — und der Plan meldet dann „reicht so nicht". */
 const hMonthKnown = (s) => monthsAfterYm(s.r34Ez, H_PLATE_YEARS) != null;
 const age25Known = (s) => monthsAfterYm(s.birth, AGE_CLASSIC_INSURANCE) != null;
-const raiseMonth = (s) => Math.max(0, idxFromYm(s.raiseYm) ?? 0);
+/** Die bekannten Gehaltsschritte, aufsteigend nach Monat, ohne Müll.
+ *
+ *  Ersetzt das frühere Paar aus „Netto nach der Erhöhung" und „Erhöhung ab". Das
+ *  konnte genau einen Sprung abbilden — wer im zweiten Lehrjahr schon weiß, was das
+ *  dritte bringt, oder in vier Monaten den Arbeitgeber wechselt, konnte das nicht
+ *  eintragen. Schritte in der Vergangenheit sind kein Fehler: sie beschreiben, was
+ *  bereits gilt, und werden deshalb auf den laufenden Monat gezogen. */
+const incomeSteps = (s) =>
+  (ledgers.income || [])
+    .map((r) => ({
+      m: Math.max(0, idxFromYm(r.month) ?? NaN),
+      amt: Number(r.amt),
+      note: r.src || "",
+    }))
+    .filter((x) => Number.isFinite(x.m) && Number.isFinite(x.amt) && x.amt > 0)
+    .sort((a, b) => a.m - b.m);
+
+/** Der letzte bekannte Punkt der Einkommensreihe. Ab hier — und nur ab hier —
+ *  greift die allgemeine Lohnentwicklung; zwischen bekannten Schritten wären es
+ *  die Zahlen aus dem Vertrag, die schon eine Erhöhung enthalten. */
+const incomeAnchor = (s) => {
+  const steps = incomeSteps(s);
+  return steps.length ? steps[steps.length - 1] : { m: 0, amt: s.netNow };
+};
+
+/** Erster Schritt, falls vorhanden — für Beschriftungen in Verlauf und Zeitleiste. */
+const firstRaise = (s) => incomeSteps(s)[0] ?? null;
 
 function seasonMonths(s) {
   if (!s.r34Season) return 12;
@@ -93,7 +124,10 @@ const resolveSf = (s, which) => {
 
 /** Das letzte Simulationsergebnis und die letzte Streuungsmessung. Beides wird von
  *  render.js gesetzt und von Zusammenfassungen gelesen. */
-const runtime = { lastRun: null, lastSpread: null };
+const runtime = { lastRun: null, lastSpread: null, lastForecast: null,
+  /** Aufgaben-Kennung → gemessene Verengung der Spanne */
+  taskGain: {},
+};
 
 export {
   UI_KEYS,
@@ -108,7 +142,9 @@ export {
   hMonthKnown,
   age25Month,
   age25Known,
-  raiseMonth,
+  incomeSteps,
+  incomeAnchor,
+  firstRaise,
   seasonMonths,
   seasonValid,
   seasonTaxFactor,

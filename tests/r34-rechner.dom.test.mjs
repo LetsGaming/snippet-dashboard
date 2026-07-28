@@ -124,6 +124,93 @@ if (JSDOM) {
     }
   });
 
+  test("Hero zeigt den Spielraum der Sparphase, Fahrschule läuft mit", async () => {
+    render();
+    await settle();
+    const hero = el("hero").textContent;
+    assert.match(hero, /Bis dahin frei/);
+    assert.match(hero, /Danach frei im Monat/);
+    // Bei den Vorgaben ist der engste Monat die Fahrschulzeit
+    assert.match(hero, /Fahrschule läuft bis/);
+    assert.ok(el("f_licenceMonths"), "Feld für die Ausbildungsdauer fehlt");
+  });
+
+  test("Hilfetexte stehen einmal je Bereich, nicht an jedem Feld", async () => {
+    /* 65 Fragezeichen an Feldern, davon 27 Wiederholungen desselben Textes — das las
+       sich als „alles hier ist erklärungsbedürftig". */
+    const proGruppe = new Map();
+    for (const btn of window.document.querySelectorAll(".hbtn")) {
+      const flab = btn.closest(".flab");
+      if (!flab) continue;
+      const gruppe = btn.closest(".grp")?.id ?? "steer";
+      const schluessel = `${gruppe}|${btn.dataset.help}`;
+      proGruppe.set(schluessel, (proGruppe.get(schluessel) ?? 0) + 1);
+    }
+    const doppelt = [...proGruppe].filter(([, n]) => n > 1);
+    assert.deepEqual(doppelt, [], `mehrfach im selben Bereich: ${doppelt.map(([k]) => k).join(", ")}`);
+  });
+
+  test("jede Ergebniskarte ordnet ihre Zahl ein", async () => {
+    render();
+    await settle();
+    const karten = [...window.document.querySelectorAll(".hstats > div")];
+    assert.ok(karten.length >= 4);
+    for (const name of ["Aufs Tagesgeld", "Bis dahin frei", "Danach frei"]) {
+      const k = karten.find((n) => n.textContent.includes(name));
+      assert.ok(k, `Karte "${name}" fehlt`);
+      assert.ok(k.querySelector(".hx")?.textContent.trim(), `"${name}" ohne Einordnung`);
+    }
+    // Beide Spielraum-Karten tragen ein Etikett, nicht nur eine davon
+    const frei = karten.filter((n) => /frei/.test(n.textContent));
+    for (const k of frei)
+      assert.ok(k.querySelector(".pill"), "eine Zahl ohne Etikett neben einer mit");
+  });
+
+  test("Sparverlauf weist aus, was zum Leben bleibt", async () => {
+    render();
+    await settle();
+    const table = el("der_saving").textContent;
+    assert.match(table, /zum Leben/);
+    assert.match(table, /aufs Tagesgeld/);
+    // Die Zeilen müssen sich aufaddieren lassen: übrig − aufs Tagesgeld = zum Leben
+    const zahlen = [...el('der_saving').querySelectorAll('tbody tr')].map((tr) =>
+      [...tr.querySelectorAll('td')].slice(1).map((td) =>
+        Number((td.textContent.match(/-?[\d.]+/) || ['0'])[0].replace(/\./g, ''))));
+    for (const [uebrig, aufs, frei] of zahlen.filter((z) => z.length === 3))
+      assert.ok(Math.abs(uebrig - aufs - frei) <= 1,
+        `Zeile geht nicht auf: ${uebrig} − ${aufs} ≠ ${frei}`);
+  });
+
+  test("Gehaltsschritte lassen sich über die Oberfläche erfassen", async () => {
+    assert.ok(el("led_income"), "Beleg für Gehaltsschritte fehlt");
+    assert.ok(!el("f_netAfter") && !el("f_raiseYm"), "das alte Feldpaar muss weg sein");
+
+    const put = (col, v) => {
+      const node = window.document.querySelector(`[data-led="income"][data-col="${col}"]`);
+      node.value = String(v);
+    };
+    ledgers.income.length = 0;
+    put("month", dateOf(12));
+    put("amt", 2500);
+    put("src", "3. Lehrjahr");
+    window.document.querySelector('[data-add="income"]').click();
+    await settle();
+    assert.equal(ledgers.income.length, 1);
+    assert.equal(ledgers.income[0].amt, 2500);
+    assert.match(el("led_income").textContent, /3\. Lehrjahr/);
+
+    // und ein zweiter Schritt daneben
+    put("month", dateOf(24));
+    put("amt", 3000);
+    put("src", "Übernahme");
+    window.document.querySelector('[data-add="income"]').click();
+    await settle();
+    assert.equal(ledgers.income.length, 2, "mehrere Schritte müssen nebeneinander stehen");
+    ledgers.income.length = 0;
+    render();
+    await settle();
+  });
+
   test("gleiche Eingabe hebt die Herkunft nicht auf „von dir“", () => {
     prov.living = "guess";
     const node = el("f_living");

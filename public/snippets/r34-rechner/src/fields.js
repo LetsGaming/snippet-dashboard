@@ -10,13 +10,24 @@ import { el, helpBtn, provDot } from "./dom.js";
    Klick zweimal — einmal direkt, einmal über das Label — und das Aufklappen
    wird sofort wieder zurückgenommen. Deshalb <label for="…">, kein Wrapper.
    ============================================================ */
+/* Ein Hilfetext, der in derselben Gruppe schon einen Knopf hat, bekommt keinen zweiten.
+   „Fahrleistung", „Verbrauch", „Kraftstoff" und die drei Spritpreise zeigten alle
+   dieselbe Erklärung — von 65 Fragezeichen an Feldern waren 27 Wiederholungen. Der Text
+   bleibt erreichbar, er steht nur ein Feld weiter oben statt fünfmal untereinander. */
+let helpSeen = new Set();
+const resetHelpScope = () => {
+  helpSeen = new Set();
+};
+
 function labelHTML(f, forId) {
   const cls = f.tip ? "flab tip" : "flab";
   const tip = f.tip ? ` data-tip="${esc(f.tip)}"` : "";
   const text = forId
     ? `<label for="${forId}">${f.label}</label>`
     : `<span>${f.label}</span>`;
-  const help = f.help
+  const first = f.help && !helpSeen.has(f.help);
+  if (f.help) helpSeen.add(f.help);
+  const help = first
     ? `<button type="button" class="hbtn" data-help="${f.help}" aria-label="Erklärung zu ${esc(f.label)}">?</button>`
     : "";
   return `<span class="${cls}"${tip}>${text}${help}${provDot(f.key)}</span>`;
@@ -87,13 +98,18 @@ function fieldHTML(f) {
 }
 
 const EFFECT = {
-  date: { cls: "eff-date", text: "wirkt auf den Termin" },
-  after: { cls: "eff-after", text: "wirkt auf den Spielraum danach" },
+  /* Auf den Termin wirken sechs von sieben Gruppen — ein Etikett, das fast überall
+     steht, trägt keine Information mehr und erzeugt nur Fläche. Beschriftet wird
+     deshalb nur die Ausnahme. */
+  date: null,
+  after: { cls: "eff-after", text: "wirkt erst nach dem Kauf" },
 };
 
 /** Lange Gruppen bekommen Zwischenüberschriften, sonst gehen die Wahlmöglichkeiten
  *  zwischen den technischen Feldern unter. Felder ohne `section` stehen oben. */
 function groupBodyHTML(g) {
+  // Jede Gruppe beginnt neu — der Hilfetext soll in jedem Bereich einmal erreichbar sein
+  resetHelpScope();
   const sections = [];
   const byTitle = new Map();
   g.fields.forEach((f) => {
@@ -141,6 +157,7 @@ function buildFields() {
   // Oben die Stellschrauben. Preis und Termin eines Autos stehen als Paar zusammen,
   // weil man sie zusammen anfasst.
   const done = new Set();
+  resetHelpScope();
   el("steer").innerHTML = STEER.map((f) => {
     if (done.has(f.key)) return "";
     if (!f.pair) return fieldHTML(f);

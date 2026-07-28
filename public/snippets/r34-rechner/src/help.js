@@ -7,13 +7,9 @@ const HELP = {
     t: "Netto heute",
     b: 'Dein monatliches Nettoeinkommen inklusive steuerfreiem Fahrgeld. Gilt im Modell bis zu dem Monat, den du unter „Erhöhung ab" einträgst.',
   },
-  netAfter: {
-    t: "Netto nach der Erhöhung",
-    b: "Das Netto ab dem Monat der vertraglichen Erhöhung. Ab da schreibt der Rechner es jährlich mit der Lohnentwicklung fort, es bleibt also nicht konstant stehen.<br><br>Zweitstärkster Hebel auf den Termin: mit den Standardwerten bewegen 200 € mehr oder weniger ihn um rund 14 Monate.",
-  },
-  raiseYm: {
-    t: "Monat der Erhöhung",
-    b: "Ab diesem Monat rechnet das Modell mit dem höheren Netto, davor mit dem aktuellen. Der Übergang ist hart, eine Zwischenstufe gibt es nicht.",
+  income: {
+    t: "Bekannte Gehaltsschritte",
+    b: "Jede Zeile ist ein Netto, von dem du weißt, dass es ab einem bestimmten Monat gilt: das nächste Ausbildungsjahr, eine Tarifstufe, der Wechsel in die Übernahme, ein neuer Arbeitgeber. Trag so viele ein, wie du kennst.<br><br>Zwischen zwei erfassten Schritten rechnet der Plan mit dem erfassten Betrag — der enthält die Erhöhung ja bereits. Erst <b>hinter dem letzten</b> Schritt greift die allgemeine Lohnentwicklung. Sonst schlüge sie auf Zahlen auf, die aus deinem Vertrag stammen.<br><br>Bis zum ersten Schritt gilt dein heutiges Netto unverändert. Ist die Liste leer, läuft das heutige Netto von Anfang an mit der Lohnentwicklung weiter.<br><br>Ein Schritt in der Vergangenheit ist kein Fehler: er wird auf den laufenden Monat gezogen und beschreibt damit, was ohnehin schon gilt.",
   },
   living: {
     t: "Lebenshaltung ohne Auto",
@@ -26,8 +22,8 @@ const HELP = {
 
   /* Korridor und Hebel */
   spread: {
-    t: "Die Spanne über dem Ergebnis",
-    b: "Links steht, wo du landest, wenn die offenen Annahmen günstig ausgehen; rechts, wenn sie ungünstig ausgehen; in der Mitte die Rechnung mit genau den Zahlen, die eingetragen sind.<br><br>Die Spanne ist <b>nicht</b> der absolute Extremfall. Sie geht davon aus, dass sich Abweichungen teilweise ausgleichen — dass Spritpreis, Miete, Kaufpreis und Zins alle gleichzeitig am ungünstigsten Rand landen, ist kein Normalfall.<br><br>Über den Knopf unter der Spanne siehst du die vollständige Aufschlüsselung: welcher Posten wie viel beiträgt, welche Bandbreite dafür angesetzt ist und was der echte Extremfall wäre.",
+    t: "Woher die Spanne kommt",
+    b: "Der Rechner zieht ein paar hundert vollständige Durchläufe. In jedem werden alle offenen Zahlen gleichzeitig neu ausgewürfelt, und heraus kommt eine Verteilung von Kaufterminen statt einer einzigen Zahl.<br><br>Angezeigt sind das <b>10-, 50- und 90-Prozent-Quantil</b>: in jedem zehnten Durchlauf ist es früher als links, in jedem zehnten später als rechts. Die Mitte ist der Median, nicht deine Punktrechnung — er liegt meist etwas später, weil Kosten nach oben mehr Luft haben als nach unten.<br><br>Drei Dinge stecken darin, die eine einfache Fehlerrechnung nicht abbildet:<br><br><b>Zusammenhänge.</b> Lebenshaltung, Wartung, Versicherung und Sprit hängen alle an derselben Inflation. Sie werden deshalb gemeinsam gezogen, nicht unabhängig — sonst wäre die Spanne zu schmal.<br><br><b>Schiefe.</b> Eine Reparatur kann das Fünffache der Schätzung kosten, aber nie weniger als nichts. Kostenfelder werden deshalb multiplikativ gezogen: nach unten begrenzt, nach oben offen.<br><br><b>Ereignisse.</b> Eine große Reparatur (10 % im Jahr) und ein zeitweiser Einkommensausfall (3 % im Jahr) kommen vor. Dazu die Entweder-oder-Fragen: Schadstoffklasse, H-Kennzeichen, Klassikertarif. Das sind Risiken, die keine Bandbreite abdeckt.<br><br>Wie breit die Spanne wird, hängt an den Herkunftspunkten: belegte Zahlen streuen weniger als geratene. Angebote zu erfassen macht sie also nicht kosmetisch, sondern berechtigt schmaler.",
   },
   levers: {
     t: "Was den Termin verschiebt",
@@ -245,7 +241,7 @@ const HELP = {
   },
   licence: {
     t: "Kosten Führerschein",
-    b: "Klasse B, realistisch 3.000 bis 4.500 € inklusive Fahrstunden, Theorie und Prüfungsgebühren.<br><br>Wird einmalig im geplanten Monat abgezogen und verschiebt den Termin um etwa einen Monat, ist also der kleinste der wirksamen Posten. Zwei Angebote von Fahrschulen vor Ort ersetzen die Schätzung.",
+    b: "Klasse B, realistisch 3.000 bis 4.500 € inklusive Fahrstunden, Theorie und Prüfungsgebühren.<br><br>Wird einmalig im geplanten Monat abgezogen und verschiebt den Termin um etwa einen Monat, ist also der kleinste der wirksamen Posten. Zwei Angebote von Fahrschulen vor Ort ersetzen die Schätzung.<br><br>Gezahlt wird nicht am Ende, sondern laufend: Grundgebühr, Fahrstunden und Prüfungsgebühren verteilen sich über die Ausbildungszeit. Der Rechner verteilt den Betrag deshalb gleichmäßig auf die eingestellten Monate und lässt sie mit dem Prüfungstermin enden. Ist bis dahin weniger Zeit als die angesetzte Dauer, wird die Summe auf die verbleibenden Monate gedrängt — sie wird nicht kleiner, nur die Rate höher.<br><br>Als Einmalbetrag gerechnet zeigte der Plan davor einen Kontostand, den es so nie gab.",
   },
   birth: {
     t: "Geburtsmonat",
@@ -294,6 +290,14 @@ const HELP = {
   strat: {
     t: "Reihenfolge der Käufe",
     b: "<b>Daily zuerst:</b> Du bist früh mobil und sammelst SF-Jahre auf dem günstigen Auto. Der R34 kommt später, startet dann aber als Zweitwagen und ist deutlich billiger versichert.<br><br><b>R34 zuerst:</b> Du bist früher am Traumauto, versicherst es aber als Erstwagen eines Fahranfängers. Der Daily kommt erst danach und nur, wenn der Kauf die Rücklage nicht antastet.<br><br>Die Wahl steuert auch die automatische SF-Einstufung beider Autos.",
+  },
+  tagesgeld: {
+    t: "Aufs Tagesgeld",
+    b: "Was im Schnitt Monat für Monat auf dem Tagesgeld liegen bleibt — nicht, was der Dauerauftrag anweist.<br><br>Die beiden Zahlen sind nicht dasselbe. Ist der Dauerauftrag höher als das, was der Monat hergibt, holt sich das laufende Konto die Differenz im selben Monat zurück. Angewiesen werden dann 700 €, liegen bleiben vielleicht 628. Für den Kauftermin zählt nur die zweite Zahl.<br><br>Führerschein und Autokauf sind hier nicht abgezogen — die stehen in der Aufstellung unter „Wohin das Geld bis dahin fließt\".",
+  },
+  freeSaving: {
+    t: "Bis dahin frei",
+    b: "Was dir während der Sparphase im Monat zum Leben bleibt: Netto minus Lebenshaltung, minus Unterhalt des Alltagsautos, minus Dauerauftrag.<br><br>Führerschein und Autokauf zählen hier nicht mit — die kommen aus dem Ersparten und sind kein Haushaltsgeld. Sonst wiese ausgerechnet der Monat einer Fahrschulrate plötzlich mehr Spielraum aus.<br><br>Ist die Zahl <b>negativ</b>, liegt dein Dauerauftrag über dem, was der Monat hergibt. Das Modell holt sich die Differenz vom Tagesgeld zurück, und der Kauftermin bewegt sich dadurch nicht — aber es heißt, dass der Betrag im Dauerauftrag nicht der ist, den du tatsächlich zurücklegen kannst.<br><br>Angezeigt wird der engste Monat. Der liegt meist direkt nach dem Kauf des Alltagsautos, bevor die Gehaltserhöhung greift.",
   },
   leftover: {
     t: "Frei nach dem Kauf",

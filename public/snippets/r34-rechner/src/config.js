@@ -9,10 +9,12 @@ const LIEBHABER_FALLBACK_Y = 1540;
 /* Der Schlüssel bleibt v4: die Form des Schnappschusses ist unverändert, nur die
    Fassung zählt hoch. Ein neuer Schlüssel würde jeden gespeicherten Plan verwerfen. */
 const STORE_KEY = "r34planer:v4";
-const SNAPSHOT_VERSION = 7;
+const SNAPSHOT_VERSION = 8;
 const FETCH_TIMEOUT_MS = 8000;
 const PERSIST_DEBOUNCE_MS = 400;
 const HEAVY_DEBOUNCE_MS = 160;
+/* Die Vorschau zieht ein paar hundert Simulationen — sie wartet länger als der Rest. */
+const FORECAST_DEBOUNCE_MS = 450;
 const MINI_SETTLE_MS = 2000;
 const LEFTOVER_TIGHT = 150;
 const VISIT_KEY = "r34planer:lastVisit";
@@ -127,6 +129,7 @@ export {
   FETCH_TIMEOUT_MS,
   PERSIST_DEBOUNCE_MS,
   HEAVY_DEBOUNCE_MS,
+  FORECAST_DEBOUNCE_MS,
   MINI_SETTLE_MS,
   LEFTOVER_TIGHT,
   VISIT_KEY,

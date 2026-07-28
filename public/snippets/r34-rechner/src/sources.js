@@ -95,25 +95,6 @@ const ecbSource = (id, label, flow, key, docs, note) => ({
 
 const SOURCES = [
   {
-    id: "fuel",
-    label: "Spritpreise, Bundesdurchschnitt",
-    note: "Markttransparenzstelle für Kraftstoffe (MTS-K), alle 5 Minuten aktualisiert",
-    docs: "https://www.benzinpreis-aktuell.de/",
-    urls: () => [
-      "https://www.benzinpreis-aktuell.de/api.v2.php?data=nationwide",
-    ],
-    parse(text) {
-      const j = JSON.parse(text);
-      const e5 = parseFloat(j.super);
-      const e10 = parseFloat(j.e10);
-      const diesel = parseFloat(j.diesel);
-      if (!isFinite(e5) || !isFinite(e10)) return null;
-      return { asOf: String(j.date || "").slice(0, 10), e5, e10, diesel };
-    },
-    fmt: (v) =>
-      `E5 ${v.e5.toFixed(3)} · E10 ${v.e10.toFixed(3)} · Diesel ${v.diesel.toFixed(3)} €/l`,
-  },
-  {
     id: "fx",
     label: "Wechselkurse EUR → JPY / USD / GBP",
     note: "EZB-Referenzkurs über Frankfurter, werktags gegen 16:00 MEZ",
@@ -169,12 +150,6 @@ function adoptLive() {
     state[key] = Math.round(value * 1000) / 1000;
     prov[key] = from;
   };
-  const fuel = live.fuel;
-  if (fuel && fuel.state === "ok") {
-    set("fuelE5", fuel.data.e5, "live");
-    set("fuelE10", fuel.data.e10, "live");
-    set("fuelDiesel", fuel.data.diesel, "live");
-  }
   const hicp = live.hicp;
   if (hicp && hicp.state === "ok") {
     set("inflCost", hicp.data.value, "live");
