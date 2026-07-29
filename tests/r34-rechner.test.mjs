@@ -1206,3 +1206,271 @@ test("echter Dispo und zu hoher Dauerauftrag sind zwei verschiedene Zahlen", () 
   assert.equal(r.overdraftMonths, 0);
   assert.ok(r.negMonths > 0, "der zu hohe Dauerauftrag muss trotzdem sichtbar bleiben");
 });
+
+/* ---------------- Kontoauszüge lesen ---------------- */
+
+const { readStatement, mergeBalances, detectFormat } = await import(
+  `${SRC}/statement.js`
+);
+const { readFileSync } = await import("node:fs");
+const fixture = (name) =>
+  readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
+
+test("CAMT.053: Schlusssalden je Monat, spätester gewinnt", () => {
+  const r = readStatement(fixture("camt053.xml"));
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(r.format, "camt");
+  assert.deepEqual(
+    r.balances.map((b) => [b.month, b.amt]),
+    [
+      ["2026-04", 3100.5],
+      ["2026-05", 3950],
+      ["2026-06", 4876.55],
+    ],
+  );
+  // Der Zwischenstand vom 15.06. darf den Monatsendstand nicht verdrängen
+  assert.ok(!r.balances.some((b) => b.date === "2026-06-15"));
+  // Eröffnungssalden (OPBD) sind keine Monatsstände
+  assert.ok(!r.balances.some((b) => b.amt === 2400));
+  assert.deepEqual(r.accounts, ["DE02100100100006820101"]);
+});
+
+test("CAMT mit Namensraum-Präfix und Komma-Dezimalen", () => {
+  const r = readStatement(fixture("camt-ns.xml"));
+  assert.equal(r.ok, true, r.reason);
+  // DBIT heißt Sollsaldo — das Vorzeichen muss mitkommen
+  assert.deepEqual(r.balances.map((b) => [b.month, b.amt]), [["2026-07", -1250]]);
+});
+
+test("MT940: :62F: ist der Schlusssaldo, :62M: nur ein Zwischenstand", () => {
+  const r = readStatement(fixture("mt940.sta"));
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(r.format, "mt940");
+  assert.deepEqual(
+    r.balances.map((b) => [b.month, b.amt]),
+    [
+      ["2026-04", 3100.5],
+      ["2026-05", 3950],
+      ["2026-06", -120.45],
+    ],
+  );
+  // Der Zwischenstand vom 15.05. steht nicht in der Reihe
+  assert.ok(!r.balances.some((b) => b.amt === 3500));
+  // :60F: ist der Anfangssaldo und gehört nicht dazu
+  assert.ok(!r.balances.some((b) => b.amt === 2400));
+});
+
+test("beide Formate ergeben dieselbe Reihe", () => {
+  const a = readStatement(fixture("camt053.xml")).balances.slice(0, 2);
+  const b = readStatement(fixture("mt940.sta")).balances.slice(0, 2);
+  assert.deepEqual(
+    a.map((x) => [x.month, x.amt]),
+    b.map((x) => [x.month, x.amt]),
+  );
+});
+
+test("Formaterkennung greift am Inhalt, nicht an der Endung", () => {
+  assert.equal(detectFormat(fixture("camt053.xml")), "camt");
+  assert.equal(detectFormat(fixture("mt940.sta")), "mt940");
+  assert.equal(detectFormat("Datum;Betrag;Zweck\n01.06.2026;-42,00;Edeka"), "csv");
+  assert.equal(detectFormat("völliger Unsinn ohne Struktur"), null);
+});
+
+test("unbrauchbare Dateien werden benannt, nicht verschluckt", () => {
+  for (const [eingabe, muster] of [
+    ["", /leer/],
+    ["   ", /leer/],
+    ["Datum;Betrag\n01.06.2026;-42,00", /CSV/],
+    ["irgendwas", /CAMT|MT940/],
+    ["x".repeat(9 * 1024 * 1024), /8 MB/],
+  ]) {
+    const r = readStatement(eingabe);
+    assert.equal(r.ok, false);
+    assert.match(r.reason, muster);
+  }
+  assert.equal(readStatement(null).ok, false);
+  assert.equal(readStatement(undefined).ok, false);
+});
+
+test("CAMT ohne Saldo wird als solches gemeldet", () => {
+  const nurUmsaetze = `<Document><BkToCstmrStmt><Stmt>
+    <Acct><Id><IBAN>DE00</IBAN></Id></Acct>
+    <Ntry><Amt Ccy="EUR">42.00</Amt><CdtDbtInd>DBIT</CdtDbtInd></Ntry>
+  </Stmt></BkToCstmrStmt></Document>`;
+  const r = readStatement(nurUmsaetze);
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /Saldo|Salden/);
+});
+
+test("mehrere Konten in einer Datei werden gewarnt, nicht vermischt gerechnet", () => {
+  const zwei = fixture("camt053.xml").replace(
+    "DE02100100100006820101</IBAN></Id></Acct>\n      <Bal><Tp><CdOrPrtry><Cd>CLBD",
+    "DE99999999999999999999</IBAN></Id></Acct>\n      <Bal><Tp><CdOrPrtry><Cd>CLBD",
+  );
+  const r = readStatement(zwei);
+  assert.equal(r.ok, true);
+  assert.equal(r.accounts.length, 2);
+  assert.match(r.warnings.join(" "), /2 Konten/);
+});
+
+test("Zusammenführen ersetzt denselben Monat, statt ihn zu verdoppeln", () => {
+  const vorhanden = [
+    { month: "2026-04", amt: 3000, src: "von Hand" },
+    { month: "2026-05", amt: 3950, src: "von Hand" },
+  ];
+  const neu = readStatement(fixture("camt053.xml")).balances;
+  const r = mergeBalances(vorhanden, neu);
+  assert.equal(r.rows.length, 3, "kein Monat doppelt");
+  assert.equal(r.neu, 1, "06/2026 ist neu");
+  assert.equal(r.ersetzt, 1, "04/2026 weicht ab");
+  assert.equal(r.gleich, 1, "05/2026 steht schon so da");
+  assert.equal(r.rows.find((x) => x.month === "2026-04").amt, 3100.5);
+  // Unveränderte Zeilen behalten ihre Herkunft
+  assert.equal(r.rows.find((x) => x.month === "2026-05").src, "von Hand");
+  // aufsteigend sortiert
+  assert.deepEqual(
+    r.rows.map((x) => x.month),
+    ["2026-04", "2026-05", "2026-06"],
+  );
+});
+
+test("zweimal dieselbe Datei ändert nichts mehr", () => {
+  const neu = readStatement(fixture("mt940.sta")).balances;
+  const eins = mergeBalances([], neu);
+  const zwei = mergeBalances(eins.rows, neu);
+  assert.deepEqual(zwei.rows, eins.rows);
+  assert.equal(zwei.neu + zwei.ersetzt, 0);
+});
+
+/* ---------------- Buchungen einsortieren ---------------- */
+
+const { summarise, derive, categorise, merchantOf, SEED_RULES } = await import(
+  `${SRC}/spending.js`
+);
+
+test("Umbuchungen aufs eigene Tagesgeld zählen nicht als Ausgabe", () => {
+  const r = readStatement(fixture("camt-umsaetze.xml"));
+  const s = summarise(r.entries);
+  const april = s.months.find((m) => m.month === "2026-04");
+  assert.equal(april.umbuchung, 700);
+  // 700 € Übertrag dürfen die Lebenshaltung nicht aufblähen
+  assert.ok(april.leben < 800, `Lebenshaltung ${april.leben} enthält die Umbuchung`);
+});
+
+test("Autokosten bleiben von der Lebenshaltung getrennt", () => {
+  const s = summarise(readStatement(fixture("camt-umsaetze.xml")).entries);
+  const april = s.months.find((m) => m.month === "2026-04");
+  assert.equal(april.auto, 62.5, "ARAL gehört zum Auto");
+  assert.ok(!/62\.5/.test(String(april.leben)));
+  // Doppelzählung wäre der teure Fehler: der Rechner führt Sprit schon einzeln
+  assert.ok(april.leben + april.auto > april.leben);
+});
+
+test("Gehalt landet im Einkommen, nicht in den Ausgaben", () => {
+  const s = summarise(readStatement(fixture("camt-umsaetze.xml")).entries);
+  for (const m of s.months) {
+    assert.equal(m.einkommen, 1903);
+    assert.ok(m.leben < 1000);
+  }
+});
+
+test("unbekannte Empfänger bleiben offen statt geraten zu werden", () => {
+  const s = summarise(readStatement(fixture("camt-umsaetze.xml")).entries);
+  assert.equal(s.open.length, 1);
+  assert.match(s.open[0].name, /Kleinbrauerei/);
+  assert.equal(s.open[0].n, 3, "über beide Monate zusammengefasst");
+  assert.ok(Math.abs(s.open[0].summe - 73.99) < 0.01);
+  // offene Beträge stehen als eigener Posten, nicht in der Lebenshaltung
+  assert.ok(s.months.every((m) => m.offen > 0));
+});
+
+test("offene Posten sind nach Betrag sortiert", () => {
+  const entries = [
+    { month: "2026-04", amt: -5, name: "Klein" },
+    { month: "2026-04", amt: -500, name: "Gross" },
+    { month: "2026-04", amt: -50, name: "Mittel" },
+  ];
+  assert.deepEqual(
+    summarise(entries).open.map((o) => o.name),
+    ["Gross", "Mittel", "Klein"],
+  );
+});
+
+test("eine eigene Regel schlägt die Startregeln", () => {
+  const e = { month: "2026-04", amt: -30, name: "ARAL Station", text: "" };
+  assert.equal(categorise(e).cat, "auto");
+  assert.equal(categorise(e, [{ pat: "aral station", cat: "leben" }]).cat, "leben");
+});
+
+test("zweideutige Namen stehen bewusst nicht in den Startregeln", () => {
+  // „netto" ist Discounter und zugleich das Wort auf jeder Gehaltsabrechnung
+  const muster = SEED_RULES.map((r) => r.pat);
+  for (const heikel of ["netto", "amazon", "paypal", "star", "real"])
+    assert.ok(!muster.includes(heikel), `"${heikel}" darf nicht geraten werden`);
+});
+
+test("die Ableitung nimmt den Median und lehnt zu wenig Material ab", () => {
+  const s = summarise(readStatement(fixture("camt-umsaetze.xml")).entries);
+  const d = derive(s);
+  assert.equal(d.ok, true);
+  assert.equal(d.months, 2);
+  assert.ok(Math.abs(d.living - 710.3) < 0.1, `${d.living}`);
+  assert.equal(d.income, 1903);
+  assert.ok(d.openShare < 0.06, "wenig offen, Wert ist brauchbar");
+  // Ein einzelner Monat reicht nicht
+  assert.equal(derive({ months: s.months.slice(0, 1), open: [] }).ok, false);
+  // Angeschnittene Monate mit wenigen Buchungen zählen nicht als voll
+  assert.equal(
+    derive({ months: [{ month: "2026-04", n: 2, leben: 50, auto: 0, einkommen: 0, offen: 0 }], open: [] }).ok,
+    false,
+  );
+});
+
+test("einsortieren senkt den offenen Anteil", () => {
+  const r = readStatement(fixture("camt-umsaetze.xml"));
+  const vorher = derive(summarise(r.entries));
+  const nachher = derive(
+    summarise(r.entries, [{ pat: "kleinbrauerei sonnenschein", cat: "leben" }]),
+  );
+  assert.ok(nachher.openShare < vorher.openShare);
+  assert.equal(nachher.openShare, 0);
+  assert.ok(nachher.living > vorher.living, "die Beträge wandern in die Lebenshaltung");
+});
+
+test("echter Sparkassen-Auszug: Händler statt Zahlungsdienstleister", () => {
+  const r = readStatement(fixture("camt-sparkasse.xml"));
+  assert.equal(r.entries.length, 26);
+  const s = summarise(r.entries);
+  const m = s.months[0];
+
+  // Einkommen: Lohn, Kindergeld und Stadtkasse zusammen
+  assert.ok(Math.abs(m.einkommen - 1542.68) < 0.01, `${m.einkommen}`);
+  // Der Kontostand des echten Auszugs
+  assert.equal(r.balances[0].amt, 1384.9);
+
+  /* Ohne Händlerextraktion lägen dreißig verschiedene Einkäufe unter „PayPal Europe
+     S.a.r.l." in einer Gruppe — unbrauchbar zum Einsortieren. */
+  const gruppen = s.open.map((o) => o.name);
+  assert.ok(!gruppen.some((g) => /^PayPal Europe/.test(g)), `PayPal-Sammelgruppe: ${gruppen}`);
+  // Was durchgeleitet wurde, ist zugeordnet: Steam, Discord, Ubisoft, DB, Deutsche Post
+  assert.ok(m.leben > 900, `Lebenshaltung ${m.leben}`);
+  // Mindestens vier von fünf Abflüssen zugeordnet
+  assert.ok(m.offen / (m.leben + m.offen) < 0.2, `offen ${m.offen}`);
+});
+
+test("Gruppenschlüssel bleibt über verschiedene Filialen stabil", () => {
+  const zwei = [
+    { month: "2026-06", amt: -3.28, name: "", text: "REWE SAGT DANKE. 41650304/Iris-Runge/Hannover-Kronsrode /DE 2026-05-29T11:30" },
+    { month: "2026-06", amt: -29.07, name: "", text: "REWE SAGT DANKE. 41655996/Alfelder S/Hildesheim /DE 2026-06-12T15:43" },
+  ];
+  // Eine gelernte Regel muss beim nächsten Auszug wieder greifen
+  assert.equal(merchantOf(zwei[0]), merchantOf(zwei[1]));
+  assert.equal(merchantOf(zwei[0]), "REWE");
+});
+
+test("richtungsabhängige Regeln: Stadtkasse rein ist Geld, raus wäre Steuer", () => {
+  const rein = { month: "2026-06", amt: 349, name: "", text: "Stadtkasse Hildesheim 07/2026" };
+  const raus = { month: "2026-06", amt: -349, name: "", text: "Stadtkasse Hildesheim Grundsteuer" };
+  assert.equal(categorise(rein).cat, "einkommen");
+  assert.notEqual(categorise(raus).cat, "einkommen");
+});

@@ -275,6 +275,36 @@
         </summary>
         <div class="pbody">
           <div id="track"><div class="empty">wird geladen …</div></div>
+
+          <div class="stmt" id="stmtBox">
+            <div class="stmt-head">
+              <span
+                >Kontoauszug einlesen<button
+                  type="button"
+                  class="hbtn"
+                  data-help="statement"
+                >
+                  ?
+                </button></span
+              >
+              <label class="act" for="stmtFile">↑ Dateien wählen</label>
+              <input
+                type="file"
+                id="stmtFile"
+                accept=".xml,.sta,.txt,.csv,.mt940,application/xml,text/plain,text/csv"
+                multiple
+                hidden
+              />
+            </div>
+            <p class="stmt-hint">
+              CAMT (XML oder CSV) oder MT940 aus deinem Onlinebanking. Der XML-Export
+              liefert eine Datei je Buchungstag — ruhig alle auf einmal auswählen.
+              Alles bleibt im Browser und wird nirgends gespeichert.
+            </p>
+            <div id="stmtResult"></div>
+            <div id="stmtSpend"></div>
+          </div>
+
           <div class="ledger" id="led_actual"></div>
         </div>
       </details>

@@ -1,0 +1,8 @@
+"Auftragskonto";"Buchungstag";"Valutadatum";"Buchungstext";"Verwendungszweck";"Glaeubiger ID";"Mandatsreferenz";"Kundenreferenz (End-to-End)";"Sammlerreferenz";"Lastschrift Ursprungsbetrag";"Auslagenersatz Ruecklastschrift";"Beguenstigter/Zahlungspflichtiger";"Kontonummer/IBAN";"BIC (SWIFT-Code)";"Betrag";"Waehrung";"Info"
+"162632269";"01.06.2026";"01.06.2026";"DAUERAUFTRAG";"Miete";"";"";"";"";"";"";"Vermieter Miete";"DE00";"XXX";"-527,50";"EUR";"Umsatz gebucht"
+"162632269";"01.06.2026";"01.06.2026";"KARTENZAHLUNG";"01446 MCDONALDS//HANNOVER/DE 2026-05-29T13:58";"";"";"";"";"";"";"";"DE00";"XXX";"-8,69";"EUR";"Umsatz gebucht"
+"162632269";"02.06.2026";"02.06.2026";"LASTSCHRIFT";"1050616000526/PP.8259.PP/. www.steampowered.com, Ihr Einkauf bei www.steampowered.com";"";"";"";"";"";"";"PayPal Europe S.a.r.l. et Cie S.C.A";"DE00";"XXX";"-11,97";"EUR";"Umsatz gebucht"
+"162632269";"10.06.2026";"10.06.2026";"LASTSCHRIFT";"MONTANA ABPlan60102345089, Strom 67.00 EUR";"";"";"";"";"";"";"MONTANA";"DE00";"XXX";"-67,00";"EUR";"Umsatz gebucht"
+"162632269";"26.06.2026";"26.06.2026";"GUTSCHRIFT";"LOHN / GEHALT 06/26";"";"";"";"";"";"";"VISIONCONNECT GMBH";"DE00";"XXX";"934,68";"EUR";"Umsatz gebucht"
+"162632269";"08.06.2026";"08.06.2026";"GUTSCHRIFT";"Kindergeld 05 6063062148";"";"";"";"";"";"";"Bundesagentur fuer Arbeit";"DE00";"XXX";"259,00";"EUR";"Umsatz gebucht"
+"162632269";"22.06.2026";"22.06.2026";"KARTENZAHLUNG";"REWE SAGT DANKE. 41655996/Alfelder S/Hildesheim /DE";"";"";"";"";"";"";"";"DE00";"XXX";"-35,57";"EUR";"Umsatz gebucht"

@@ -1,6 +1,8 @@
-import { ymOf } from "./calendar.js";
+import { ymOf, fmtYm } from "./calendar.js";
 import { BODIES, STORE_KEY, isSolid } from "./config.js";
-import { eur, num, clamp, plural } from "./format.js";
+import { eur, num, clamp, plural, esc } from "./format.js";
+import { readStatement, combine, mergeBalances } from "./statement.js";
+import { summarise, derive } from "./spending.js";
 import { ALLFIELDS, LEDGERS } from "./catalog.js";
 import {
   state,
@@ -403,6 +405,196 @@ function wireBackup() {
 
 const CODE_LOOKS_RIGHT = /^\s*R34[01]:/;
 
+/* ---- Kontoauszug einlesen ----
+
+   Die Datei wird gelesen, gezeigt und erst nach Bestätigung übernommen. Ohne die
+   Zwischenstufe wüsste niemand, was gleich in seinen Plan wandert — und ein Auszug mit
+   dem falschen Konto fällt sonst erst Wochen später auf. */
+/* Die gelesenen Buchungen leben nur so lange, wie der Bereich offen ist. Sie werden
+   nicht gespeichert — gemerkt wird am Ende die Regel, nicht die Buchung. */
+let offeneBuchungen = [];
+
+/** Monatswerte, offene Posten und der abgeleitete Vorschlag. */
+function zeigeUmsaetze() {
+  const box = el("stmtSpend");
+  if (!box) return;
+  const s = summarise(offeneBuchungen, ledgers.rules);
+  const ab = derive(s);
+
+  const monate = s.months
+    .map(
+      (m) =>
+        `<tr><td>${fmtYm(m.month)}</td><td>${eur(m.leben)} €</td><td>${eur(m.auto)} €</td>` +
+        `<td>${eur(m.einkommen)} €</td><td class="${m.offen > 0 ? "neg" : ""}">${eur(m.offen)} €</td></tr>`,
+    )
+    .join("");
+
+  const knopf = (k, g, t) =>
+    `<button type="button" class="act sm" data-cat="${k}" data-grp="${esc(g)}">${t}</button>`;
+  const offen = s.open
+    .map(
+      (g) =>
+        `<div class="stmt-open"><span class="so-name">${esc(g.name || "ohne Angabe")}</span>` +
+        `<span class="so-meta">${plural(g.n, "Buchung", "Buchungen")} · ${eur(g.summe)} €</span>` +
+        `<span class="so-acts">${knopf("leben", g.key, "Leben")}${knopf("auto", g.key, "Auto")}` +
+        `${knopf("umbuchung", g.key, "Umbuchung")}${knopf("ignorieren", g.key, "egal")}</span></div>`,
+    )
+    .join("");
+
+  box.innerHTML =
+    `<div class="stmt-found"><b>${plural(offeneBuchungen.length, "Buchung", "Buchungen")}</b> gelesen` +
+    `<table><thead><tr><th>Monat</th><th>Leben</th><th>Auto</th><th>Einkommen</th><th>offen</th></tr></thead>` +
+    `<tbody>${monate}</tbody></table></div>` +
+    (s.open.length
+      ? `<div class="stmt-found">Diese Empfänger kennt der Rechner nicht. Einmal einsortieren, dann merkt er sie sich.</div>${offen}`
+      : `<div class="stmt-found">Alles zugeordnet.</div>`) +
+    (ab.ok
+      ? `<div class="stmt-actions"><button type="button" class="act" id="spendApply">Lebenshaltung auf ${eur(ab.living)} € setzen</button>` +
+        `<span class="stmt-hint">Median aus ${plural(ab.months, "vollem Monat", "vollen Monaten")}` +
+        (ab.openShare > 0.1
+          ? ` · <b>${Math.round(ab.openShare * 100)} % der Abflüsse noch offen</b> — erst einsortieren`
+          : "") +
+        `</span></div>`
+      : `<div class="stmt-hint">${esc(ab.reason)}</div>`);
+
+  box.querySelectorAll("[data-cat]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      /* Aus der Antwort wird eine Regel. Der Gruppenschlüssel ist der normalisierte
+         Empfängername — genau der Text, an dem die nächste Buchung wiedererkannt wird. */
+      ledgers.rules.unshift({ pat: btn.dataset.grp, cat: btn.dataset.cat });
+      persist();
+      zeigeUmsaetze();
+    }),
+  );
+
+  const setzen = el("spendApply");
+  if (setzen)
+    setzen.addEventListener("click", () => {
+      const frisch = derive(summarise(offeneBuchungen, ledgers.rules));
+      if (!frisch.ok) return;
+      state.living = Math.round(frisch.living);
+      prov.living = "proof"; // aus echten Buchungen, keine Schätzung mehr
+      setInput("f_living", state.living);
+      persist();
+      render();
+      el("stmtSpend").innerHTML =
+        `<div class="stmt-found">Lebenshaltung auf ${eur(state.living)} € gesetzt.</div>`;
+    });
+}
+
+function wireStatement() {
+  const input = el("stmtFile");
+  const out = el("stmtResult");
+  if (!input || !out) return;
+
+  const zeigeFehler = (text) => {
+    out.innerHTML = `<div class="stmt-bad">${esc(text)}</div>`;
+  };
+
+  /* Der CSV-Export der Sparkasse kommt in ISO-8859-1. `file.text()` nimmt UTF-8 an
+     und macht aus „Begünstigter" Kauderwelsch — im Verwendungszweck bricht das die
+     Erkennung. Deshalb wird streng als UTF-8 versucht und bei Fehlern umgeschaltet. */
+  const lies = async (datei) => {
+    const puffer = await datei.arrayBuffer();
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(puffer);
+    } catch {
+      return new TextDecoder("windows-1252").decode(puffer);
+    }
+  };
+
+  input.addEventListener("change", async (e) => {
+    const dateien = [...e.target.files];
+    e.target.value = ""; // dieselbe Auswahl soll erneut möglich sein
+    if (!dateien.length) return;
+    out.innerHTML = `<div class="stmt-found">${plural(dateien.length, "Datei wird gelesen", "Dateien werden gelesen")} …</div>`;
+
+    let gelesen;
+    try {
+      const einzeln = [];
+      for (const d of dateien) einzeln.push(readStatement(await lies(d)));
+      gelesen = einzeln.length === 1 ? einzeln[0] : combine(einzeln);
+    } catch {
+      zeigeFehler("Die Dateien ließen sich nicht öffnen.");
+      return;
+    }
+    if (!gelesen.ok) {
+      zeigeFehler(gelesen.reason);
+      return;
+    }
+
+    /* Vorschau gegen den vorhandenen Bestand: was ist neu, was ersetzt einen Wert, was
+       steht schon genauso da. Sonst bestätigt man blind. */
+    if (!gelesen.balances.length) {
+      out.innerHTML =
+        `<div class="stmt-found"><b>${gelesen.format === "camt" ? "CAMT" : gelesen.format === "csv" ? "CSV-CAMT" : "MT940"}</b> · ` +
+        `${plural(gelesen.entries.length, "Buchung", "Buchungen")} gelesen, keine Kontostände enthalten.</div>` +
+        `<div class="stmt-actions"><button type="button" class="act" id="stmtCancel">verwerfen</button></div>`;
+      offeneBuchungen = gelesen.entries || [];
+      if (offeneBuchungen.length) zeigeUmsaetze();
+      el("stmtCancel").addEventListener("click", () => {
+        out.innerHTML = "";
+        el("stmtSpend").innerHTML = "";
+        offeneBuchungen = [];
+      });
+      return;
+    }
+    const probe = mergeBalances(ledgers.actual, gelesen.balances);
+    const bekannt = new Map(ledgers.actual.map((r) => [r.month, Number(r.amt)]));
+    const zeilen = gelesen.balances
+      .map((b) => {
+        const alt = bekannt.get(b.month);
+        const gleich = alt != null && Math.abs(alt - b.amt) < 0.005;
+        const note = gleich
+          ? "steht schon so"
+          : alt != null
+            ? `ersetzt ${eur(alt)} €`
+            : "neu";
+        return `<tr class="${gleich ? "dup" : ""}"><td>${fmtYm(b.month)}</td><td>${note}</td><td>${eur(b.amt)} €</td></tr>`;
+      })
+      .join("");
+
+    const hinweise = gelesen.warnings.length
+      ? `<div class="stmt-bad">${gelesen.warnings.map(esc).join(" ")}</div>`
+      : "";
+    const anzuwenden = probe.neu + probe.ersetzt;
+    out.innerHTML =
+      `<div class="stmt-found"><b>${gelesen.format === "camt" ? "CAMT.053" : "MT940"}</b> · ` +
+      `${plural(gelesen.balances.length, "Monatsstand", "Monatsstände")} von ${fmtYm(gelesen.from)} bis ${fmtYm(gelesen.to)}` +
+      (gelesen.files > 1 ? ` · aus ${gelesen.files} Dateien` : "") +
+      (gelesen.accounts.length === 1 ? ` · Konto ${esc(gelesen.accounts[0])}` : "") +
+      `<table><tbody>${zeilen}</tbody></table></div>` +
+      hinweise +
+      `<div class="stmt-actions">` +
+      (anzuwenden
+        ? `<button type="button" class="act" id="stmtApply">${plural(anzuwenden, "Stand übernehmen", "Stände übernehmen")}</button>`
+        : `<span class="stmt-hint">Alles steht bereits so im Plan.</span>`) +
+      `<button type="button" class="act" id="stmtCancel">verwerfen</button></div>`;
+
+    /* Umsätze sind der zweite Schritt und bewusst getrennt: die Salden nützen sofort,
+       die Kategorisierung braucht Zuwendung. Wer nur die Stände will, ist hier fertig. */
+    offeneBuchungen = gelesen.entries || [];
+    if (offeneBuchungen.length) zeigeUmsaetze();
+
+    const apply = el("stmtApply");
+    if (apply)
+      apply.addEventListener("click", () => {
+        const { rows } = mergeBalances(ledgers.actual, gelesen.balances);
+        ledgers.actual.length = 0;
+        ledgers.actual.push(...rows);
+        out.innerHTML = `<div class="stmt-found">${plural(anzuwenden, "Stand übernommen", "Stände übernommen")}. Der Plan misst sich ab jetzt daran.</div>`;
+        persist();
+        renderLedger("actual");
+        render();
+      });
+    el("stmtCancel").addEventListener("click", () => {
+      out.innerHTML = "";
+      el("stmtSpend").innerHTML = "";
+      offeneBuchungen = [];
+    });
+  });
+}
+
 /** Ob diese Ansicht überhaupt Dateien herausgeben darf.
  *
  *  Snippets laufen in einem iframe mit `sandbox`-Liste. Fehlt dort `allow-downloads`,
@@ -553,6 +745,7 @@ export {
   syncTopControls,
   wireTopControls,
   wireBackup,
+  wireStatement,
   MODALS,
   wireHelp,
   watchHero,

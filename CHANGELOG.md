@@ -6,6 +6,87 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **R34-Rechner: Kontoauszugsleser an echten Sparkassen-Exporten geradegezogen.** Fünf
+  Fehler, die nur mit echten Dateien auffielen:
+  - Der XML-Export liefert **eine Datei je Buchungstag** (50 Stück für ein Vierteljahr).
+    Die Dateiauswahl nimmt jetzt mehrere und führt sie zusammen.
+  - Der CSV-Export kommt in **ISO-8859-1**. `file.text()` nimmt UTF-8 an und machte aus
+    „Begünstigter" Kauderwelsch, was im Verwendungszweck die Erkennung brach. Wird jetzt
+    streng als UTF-8 versucht und bei Fehlern umgeschaltet.
+  - Die Buchungsart aus `AddtlNtryInf` (FOLGELASTSCHRIFT, KARTENZAHLUNG) hing am
+    Verwendungszweck und zerstörte jede Erkennung, die am Zeilenende ansetzt: aus
+    „Ihr Einkauf bei DB Vertrieb GmbH FOLGELASTSCHRIFT" wurde kein Händler. Sie steht
+    jetzt in einem eigenen Feld — bleibt aber im Suchtext, weil
+    „UEBERTRAG (UEBERWEISUNG)" das einzige Kennzeichen einer Umbuchung ist.
+  - Umlaute werden vereinheitlicht: „UEBERTRAG" und „Übertrag" sind dasselbe.
+  - Bei CSV entschied die Reihenfolge der Kopfzeile statt der Kandidaten — damit landete
+    die Buchungsart im Textfeld und der Verwendungszweck fiel weg.
+- **Ein Export ohne Kontostände wird nicht mehr abgelehnt.** Der Umsatz-Export mancher
+  Banken enthält keine Salden; die Auswertung der Ausgaben funktioniert unabhängig davon.
+- Nullbuchungen (Entgeltabrechnung) zählen nicht als Umsatz.
+
+### Added
+- **CSV-CAMT wird gelesen.** Der frühere Einwand („jede Bank baut die Spalten anders")
+  gilt für selbstgebaute Exporte, nicht für CSV-CAMT: das Format hat benannte Spalten,
+  und genau daran wird gelesen — nie an der Position. Fehlt eine erwartete Spalte, wird
+  das gesagt, statt die falsche zu nehmen.
+- camt.052 wird neben camt.053 erkannt.
+
+### Changed
+- **R34-Rechner: der eigentliche Händler wird aus dem Buchungstext geholt.** An einem
+  echten Sparkassen-Auszug getestet. Zahlungsdienstleister und Kartenterminals schreiben
+  ihren eigenen Namen ins Namensfeld und den Händler in den Verwendungszweck — ohne
+  diesen Schritt lägen dreißig verschiedene Einkäufe unter „PayPal Europe S.a.r.l." in
+  einer einzigen offenen Gruppe, unbrauchbar zum Einsortieren und unbrauchbar für Regeln.
+  Erkannt werden PayPal („Ihr Einkauf bei …"), Klarna („Purchase at …"), Payone („i.A.
+  von …") und Kartenzahlungen („HÄNDLER//ORT/LAND").
+  Der Gruppenschlüssel wird auf die Marke zugeschnitten, damit er stabil bleibt: zwei
+  REWE-Filialen mit verschiedenen Terminalnummern ergeben eine Gruppe, nicht zwei — sonst
+  griffe eine gelernte Regel beim nächsten Auszug nicht.
+- **Regeln können eine Richtung verlangen.** „Stadtkasse" ist als Gutschrift eine
+  Leistung und als Lastschrift die Grundsteuer.
+- Startregeln nach dem echten Auszug erweitert: Kindergeld, Bundesagentur, DB Vertrieb,
+  Steam, Discord, Ubisoft, Google Play, Anthropic, Drillisch, Montana, Famila,
+  Wucherpfennig, McDonald's. Damit sind 85 % der Abflüsse ohne Zutun zugeordnet.
+- Der Hilfetext sagt jetzt, dass PDF nicht geht und wo im Sparkassen-Onlinebanking
+  CAMT und MT940 stehen.
+
+### Added
+- **R34-Rechner: Buchungen einsortieren und Lebenshaltung daraus ableiten.** Zweiter
+  Schritt nach den Salden. Der Rechner liest die Umsätze mit und ordnet sie über
+  Textregeln zu: Lebenshaltung, Auto, Einkommen, Umbuchung.
+  Zwei Trennungen tragen den Nutzen. **Umbuchungen aufs eigene Tagesgeld sind keine
+  Ausgabe** — wer sie mitzählt, hält seine Lebenshaltung für doppelt so hoch. Und
+  **Autokosten bleiben getrennt**, weil der Rechner Versicherung, Steuer, Sprit und
+  Wartung bereits einzeln je Fahrzeug führt; landen sie zusätzlich in der Lebenshaltung,
+  zählen sie zweimal.
+  Was keine Regel trifft, wird **nicht geraten**, sondern nach Gegenpartei gruppiert und
+  gefragt — nach Betrag sortiert, damit man mit dem anfängt, was ausmacht. Eine Antwort
+  wird zur Regel und gilt beim nächsten Auszug. Zweideutige Namen stehen bewusst nicht in
+  den Startregeln: „netto" ist Discounter und zugleich das Wort auf jeder
+  Gehaltsabrechnung, „amazon" kann Einkauf, Abo oder Erstattung sein.
+  Der Vorschlag ist der **Median** vollständiger Monate, nicht der Durchschnitt — ein
+  Monat mit Jahresbeitrag sagt über den Normalfall nichts. Wie belastbar er ist, steht
+  daneben: ist mehr als ein Zehntel der Abflüsse noch offen, rät der Rechner zum
+  Einsortieren statt zum Übernehmen.
+  Gespeichert werden nur die gelernten Regeln, nie eine Buchung.
+
+### Added
+- **R34-Rechner: Kontoauszug einlesen.** Statt jeden Monat den Kontostand abzutippen,
+  liest der Rechner ihn aus **CAMT.053** (ISO 20022, XML) oder **MT940** (SWIFT). Erkannt
+  wird am Inhalt, nicht an der Dateiendung. Gelesen werden ausschließlich die
+  Monatsendsalden — keine einzelne Buchung, kein Empfänger, kein Verwendungszweck. Damit
+  füllt sich das Soll-Ist von selbst, und daraus rechnet der Plan Lebenshaltung und
+  Sparrate bereits zurück, ohne dass eine Buchung kategorisiert werden muss.
+  Vor der Übernahme steht eine Vorschau: welcher Monat neu ist, welcher einen Wert
+  ersetzt, welcher schon so dasteht. Derselbe Auszug zweimal eingelesen ändert nichts.
+  Enthält die Datei mehrere Konten, wird gewarnt statt vermischt.
+  CSV wird bewusst abgelehnt: jede Bank baut die Spalten anders, und eine falsch
+  zugeordnete Spalte wäre schlimmer als Abtippen.
+  Das XML wird ohne `DOMParser` gelesen, damit das Modul in Node testbar bleibt, ohne
+  jsdom zur Laufzeitabhängigkeit zu machen.
+
 ### Changed
 - **R34-Rechner: weniger Fläche, gleiche Information.** Ein Hilfetext bekommt je Bereich
   einen Knopf statt einen pro Feld — „Fahrleistung", „Verbrauch", „Kraftstoff" und die

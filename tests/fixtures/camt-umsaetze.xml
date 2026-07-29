@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+ <BkToCstmrStmt><Stmt>
+  <Acct><Id><IBAN>DE02100100100006820101</IBAN></Id></Acct>
+  <Bal><Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp><Amt Ccy="EUR">3100.00</Amt>
+    <CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-04-30</Dt></Dt></Bal>
+  <Ntry><Amt Ccy="EUR">1903.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><BookgDt><Dt>2026-04-28</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Dbtr><Nm>VisionConnect GmbH</Nm></Dbtr></RltdPties>
+    <RmtInf><Ustrd>Gehalt April 2026</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">700.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-04-02</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>Dom Kirchner</Nm></Cdtr></RltdPties>
+    <RmtInf><Ustrd>Uebertrag Tagesgeld</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">620.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-04-03</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>Hausverwaltung Meyer</Nm></Cdtr></RltdPties>
+    <RmtInf><Ustrd>Miete April</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">84.20</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-04-07</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>EDEKA Hildesheim</Nm></Cdtr></RltdPties></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">62.50</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-04-11</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>ARAL Station 4711</Nm></Cdtr></RltdPties></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">31.99</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-04-14</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>Kleinbrauerei Sonnenschein</Nm></Cdtr></RltdPties></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">18.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-04-19</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>Kleinbrauerei Sonnenschein</Nm></Cdtr></RltdPties></TxDtls></NtryDtls></Ntry>
+ </Stmt>
+ <Stmt>
+  <Acct><Id><IBAN>DE02100100100006820101</IBAN></Id></Acct>
+  <Bal><Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp><Amt Ccy="EUR">3400.00</Amt>
+    <CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-05-31</Dt></Dt></Bal>
+  <Ntry><Amt Ccy="EUR">1903.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><BookgDt><Dt>2026-05-28</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Dbtr><Nm>VisionConnect GmbH</Nm></Dbtr></RltdPties>
+    <RmtInf><Ustrd>Gehalt Mai 2026</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">700.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-05-02</Dt></BookgDt>
+   <NtryDtls><TxDtls><RmtInf><Ustrd>Uebertrag Tagesgeld</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">620.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-05-03</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>Hausverwaltung Meyer</Nm></Cdtr></RltdPties>
+    <RmtInf><Ustrd>Miete Mai</Ustrd></RmtInf></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">96.40</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-05-08</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>REWE Markt</Nm></Cdtr></RltdPties></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">58.10</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-05-12</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>Shell Deutschland</Nm></Cdtr></RltdPties></TxDtls></NtryDtls></Ntry>
+  <Ntry><Amt Ccy="EUR">24.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-05-20</Dt></BookgDt>
+   <NtryDtls><TxDtls><RltdPties><Cdtr><Nm>Kleinbrauerei Sonnenschein</Nm></Cdtr></RltdPties></TxDtls></NtryDtls></Ntry>
+ </Stmt></BkToCstmrStmt></Document>

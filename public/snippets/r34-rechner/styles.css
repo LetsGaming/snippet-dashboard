@@ -2227,3 +2227,89 @@ table.cmp.phases tr.sumline td {
   border-color: var(--line-strong);
   color: var(--ink2);
 }
+
+/* ---- Kontoauszug einlesen ---- */
+.stmt {
+  margin-top: 14px;
+  padding: 12px var(--gap-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--field);
+}
+.stmt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+.stmt-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--ink3);
+  line-height: 1.6;
+}
+.stmt-found {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink2);
+  line-height: 1.7;
+}
+.stmt-found table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+.stmt-found td {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+.stmt-found td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.stmt-found tr.dup td {
+  color: var(--ink3);
+}
+.stmt-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.stmt-bad {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--bad);
+  line-height: 1.6;
+}
+
+/* ---- Offene Empfänger einsortieren ---- */
+.stmt-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.so-name {
+  flex: 1 1 160px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.so-meta {
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+.so-acts {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.act.sm {
+  padding: 3px 8px;
+  font-size: 11px;
+}

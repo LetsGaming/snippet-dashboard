@@ -75,11 +75,17 @@ if (JSDOM) {
     wireLedgers,
     wireHelp,
     wireBackup,
+    wireStatement,
     syncTopControls,
   } = await src("wire.js");
   const { auditLayout } = await src("selfcheck.js");
   const { ALLFIELDS } = await src("catalog.js");
   const el = (id) => window.document.getElementById(id);
+  const put = (id, v) => {
+    const node = el(id);
+    node.value = String(v);
+    node.dispatchEvent(new window.Event("input", { bubbles: true }));
+  };
 
   buildFields();
   wireFields();
@@ -87,6 +93,7 @@ if (JSDOM) {
   wireLedgers();
   wireHelp();
   wireBackup();
+  wireStatement();
   syncTopControls();
   render();
 
@@ -209,6 +216,87 @@ if (JSDOM) {
     ledgers.income.length = 0;
     render();
     await settle();
+  });
+
+  test("Kontoauszug: Vorschau erscheint, Übernahme füllt das Soll-Ist", async () => {
+    const { readFileSync } = await import("node:fs");
+    const xml = readFileSync(new URL("./fixtures/camt053.xml", import.meta.url), "utf8");
+    ledgers.actual.length = 0;
+
+    // Der Browser liefert ein File-Objekt; hier genügt etwas mit .text()
+    const input = el("stmtFile");
+    Object.defineProperty(input, "files", {
+      value: [{ name: "auszug.xml", arrayBuffer: async () => new TextEncoder().encode(xml).buffer }],
+      configurable: true,
+    });
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await settle();
+
+    const vorschau = el("stmtResult").textContent;
+    assert.match(vorschau, /CAMT\.053/);
+    assert.match(vorschau, /3 Monatsstände/);
+    assert.match(vorschau, /DE02100100100006820101/);
+    assert.equal(ledgers.actual.length, 0, "vor der Bestätigung darf nichts übernommen sein");
+
+    el("stmtApply").click();
+    await settle();
+    assert.equal(ledgers.actual.length, 3);
+    assert.equal(ledgers.actual[2].amt, 4876.55);
+    assert.match(el("stmtResult").textContent, /übernommen/);
+
+    ledgers.actual.length = 0;
+    render();
+    await settle();
+  });
+
+  test("Kontoauszug: offene Empfänger einsortieren setzt die Lebenshaltung", async () => {
+    const { readFileSync } = await import("node:fs");
+    const xml = readFileSync(new URL("./fixtures/camt-umsaetze.xml", import.meta.url), "utf8");
+    ledgers.actual.length = 0;
+    ledgers.rules.length = 0;
+
+    const input = el("stmtFile");
+    Object.defineProperty(input, "files", {
+      value: [{ name: "umsaetze.xml", arrayBuffer: async () => new TextEncoder().encode(xml).buffer }],
+      configurable: true,
+    });
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await settle();
+
+    const spend = el("stmtSpend");
+    assert.match(spend.textContent, /13 Buchungen/);
+    assert.match(spend.textContent, /Kleinbrauerei/, "der unbekannte Empfänger muss auftauchen");
+    assert.ok(spend.querySelector('[data-cat="leben"]'), "Einsortier-Knöpfe fehlen");
+
+    // Einsortieren erzeugt eine Regel und blendet den Posten aus
+    spend.querySelector('[data-cat="leben"]').click();
+    await settle();
+    assert.equal(ledgers.rules.length, 1);
+    assert.match(el("stmtSpend").textContent, /Alles zugeordnet/);
+
+    // und der Vorschlag landet im Feld
+    el("spendApply").click();
+    await settle();
+    assert.ok(state.living > 700 && state.living < 800, `living=${state.living}`);
+    assert.equal(prov.living, "proof");
+
+    ledgers.rules.length = 0;
+    ledgers.actual.length = 0;
+    put("f_living", 950);
+    render();
+    await settle();
+  });
+
+  test("Kontoauszug: unbrauchbare Datei nennt den Grund", async () => {
+    const input = el("stmtFile");
+    Object.defineProperty(input, "files", {
+      value: [{ name: "muell.txt", arrayBuffer: async () => new TextEncoder().encode("irgendwas ohne Struktur").buffer }],
+      configurable: true,
+    });
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await settle();
+    assert.match(el("stmtResult").textContent, /CAMT|MT940/);
+    assert.equal(ledgers.actual.length, 0);
   });
 
   test("gleiche Eingabe hebt die Herkunft nicht auf „von dir“", () => {

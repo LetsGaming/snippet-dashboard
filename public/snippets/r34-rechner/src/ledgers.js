@@ -14,6 +14,9 @@ const ledgers = {
      einzelner Sprung die Wirklichkeit nicht trifft: Ausbildungsjahre, Tarifstufen
      und ein Jobwechsel in vier Monaten sind alle gleichzeitig planbar. */
   income: [],
+  /* Gelernte Zuordnungen aus dem Kontoauszug: Textmuster → Kategorie. Nur die Regel
+     wird gespeichert, nie die Buchung, aus der sie entstanden ist. */
+  rules: [],
 };
 const doneTasks = {}; // Aufgaben-Kennung → ISO-Datum der Erledigung
 

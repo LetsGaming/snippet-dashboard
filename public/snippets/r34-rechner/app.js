@@ -24,6 +24,7 @@ import {
   wireLedgers,
   wireTopControls,
   wireBackup,
+  wireStatement,
   wireHelp,
   wireReset,
   syncTopControls,
@@ -47,6 +48,7 @@ async function boot() {
   wireTopControls();
   wireLedgers();
   wireBackup();
+  wireStatement();
   wireHelp();
   wireReset();
   syncTopControls();

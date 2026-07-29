@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<camt:Document xmlns:camt="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
+  <camt:BkToCstmrStmt>
+    <camt:Stmt>
+      <camt:Acct><camt:Id><camt:IBAN>DE44500105175407324931</camt:IBAN></camt:Id></camt:Acct>
+      <camt:Bal><camt:Tp><camt:CdOrPrtry><camt:Cd>CLBD</camt:Cd></camt:CdOrPrtry></camt:Tp>
+        <camt:Amt Ccy="EUR">1250,00</camt:Amt><camt:CdtDbtInd>DBIT</camt:CdtDbtInd>
+        <camt:Dt><camt:Dt>2026-07-31</camt:Dt></camt:Dt></camt:Bal>
+    </camt:Stmt>
+  </camt:BkToCstmrStmt>
+</camt:Document>
