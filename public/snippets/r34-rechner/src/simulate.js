@@ -94,6 +94,11 @@ function simulate(s, ov = {}) {
      angesetzte Dauer, wird sie auf die verbleibenden Monate gedrängt statt gekürzt.
      Ein Termin in der Vergangenheit fällt auf den laufenden Monat — vorher fiel die
      Zahlung dann ganz aus, weil die Schleife bei null beginnt. */
+  /* Ab diesem Monat wandert wieder alles Übrige aufs Tagesgeld. `null` heißt: nie —
+     der Dauerauftrag läuft dann unverändert bis zum Kauf. Wer weiß, dass bis zum
+     Sommer noch Ausgaben anstehen, will bis dahin nicht jeden Euro wegsparen. */
+  const switchM =
+    s.saveMode === "fixed" ? (idxFromYm(s.saveSwitchYm) ?? null) : 0;
   const shocks = Array.isArray(ov.events) ? ov.events : [];
   const licEnd = s.licenseOwned ? -1 : Math.max(0, licM);
   /* Der Zahlungszeitraum folgt aus dem Prüfungstermin: von heute bis zur Prüfung, denn
@@ -285,7 +290,7 @@ function simulate(s, ov = {}) {
     // Aufteilung auf die beiden Töpfe. Nach dem R34-Kauf endet der Dauerauftrag.
     const stillSaving = r34Month == null;
     let toSavings;
-    if (stillSaving && s.saveMode === "fixed") {
+    if (stillSaving && s.saveMode === "fixed" && (switchM == null || m < switchM)) {
       const surplus = Math.max(0, flow - s.saveFixed);
       toSavings = s.saveFixed + (surplus * (s.saveSurplus || 0)) / 100;
     } else {

@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **R34-Rechner: Dauerauftrag bis zu einem Datum.** Neues Feld „danach alles Übrige ab":
+  bis dahin der feste Betrag, danach wandert wieder alles Übrige aufs Tagesgeld. Für den
+  Fall, dass bis zu einem bekannten Zeitpunkt noch Ausgaben anstehen — bis dahin will man
+  nicht jeden Euro wegsparen, danach schon. Leer heißt: unverändert bis zum Kauf.
+- **Der Kontoauszugsleser rechnet aus, was sich überweisen lässt.** Einnahmen minus alles,
+  was tatsächlich abfließt, einschließlich der noch nicht einsortierten Posten — die sind
+  ja bezahlt worden. Angezeigt werden Median, schwächster und bester Monat.
+  Zum Übernehmen angeboten wird der **schwächste** Monat, nicht der Median: seit das
+  Tagesgeld eine Einbahnstraße ist, bedeutet jeder Euro darüber in mindestens einem
+  erfassten Monat ein Minus auf dem laufenden Konto und damit Dispozinsen. Blieb in einem
+  Monat nichts übrig, sagt der Rechner das und rät zu „alles Übrige".
+
 ### Changed
 - **R34-Rechner: „Fahrschule läuft über X Monate" ist weg.** Das Feld verlangte eine
   Entscheidung, deren Antwort schon im Prüfungstermin steht: bis zum Abschluss ist die

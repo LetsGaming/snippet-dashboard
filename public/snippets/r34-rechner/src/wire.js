@@ -449,6 +449,7 @@ function zeigeUmsaetze() {
     (s.open.length
       ? `<div class="stmt-found">Diese Empfänger kennt der Rechner nicht. Einmal einsortieren, dann merkt er sie sich.</div>${offen}`
       : `<div class="stmt-found">Alles zugeordnet.</div>`) +
+    (ab.ok ? kapazitaet(ab) : "") +
     (ab.ok
       ? `<div class="stmt-actions"><button type="button" class="act" id="spendApply">Lebenshaltung auf ${eur(ab.living)} € setzen</button>` +
         `<span class="stmt-hint">Median aus ${plural(ab.months, "vollem Monat", "vollen Monaten")}` +
@@ -468,6 +469,18 @@ function zeigeUmsaetze() {
     }),
   );
 
+  const rate = el("rateApply");
+  if (rate)
+    rate.addEventListener("click", () => {
+      state.saveMode = "fixed";
+      state.saveFixed = Number(rate.dataset.betrag);
+      prov.saveFixed = "proof"; // aus echten Kontobewegungen, keine Schätzung
+      setSeg("seg_saveMode", "fixed");
+      setInput("f_saveFixed", state.saveFixed);
+      persist();
+      render();
+    });
+
   const setzen = el("spendApply");
   if (setzen)
     setzen.addEventListener("click", () => {
@@ -481,6 +494,29 @@ function zeigeUmsaetze() {
       el("stmtSpend").innerHTML =
         `<div class="stmt-found">Lebenshaltung auf ${eur(state.living)} € gesetzt.</div>`;
     });
+}
+
+/** Was sich realistisch überweisen lässt — und was davon jeden Monat trägt.
+ *
+ *  Der Median sagt, wie es im Normalfall aussieht; der schwächste Monat sagt, was ein
+ *  Dauerauftrag verträgt. Seit das Tagesgeld eine Einbahnstraße ist, ist das kein
+ *  Detail: ein Betrag über dem schwächsten Monat bedeutet Dispozinsen. */
+function kapazitaet(ab) {
+  const k = ab.capacity;
+  if (!k) return "";
+  const sicher = Math.floor(Math.max(0, k.min) / 10) * 10;
+  return (
+    `<div class="stmt-found"><b>Was übrig bleibt</b> — Einnahmen minus alles, was abfließt:<br>` +
+    `Median ${eur(k.median)} € · schwächster der ${plural(k.months, "Monat", "Monate")} ${eur(k.min)} € · bester ${eur(k.max)} €` +
+    (ab.openShare > 0.1
+      ? `<span class="warn">${Math.round(ab.openShare * 100)} % der Abflüsse sind noch nicht einsortiert — die Zahl steht erst danach.</span>`
+      : "") +
+    `</div>` +
+    (sicher > 0
+      ? `<div class="stmt-actions"><button type="button" class="act" id="rateApply" data-betrag="${sicher}">Dauerauftrag auf ${eur(sicher)} € setzen</button>` +
+        `<span class="stmt-hint">So viel war in jedem erfassten Monat da. Mehr geht im Schnitt, kostet aber in schwachen Monaten Dispozinsen.</span></div>`
+      : `<div class="stmt-hint">In mindestens einem Monat blieb nichts übrig — ein fester Dauerauftrag würde dort ins Minus führen. „Alles Übrige" passt sich an und kommt ohne Überziehung aus.</div>`)
+  );
 }
 
 function wireStatement() {

@@ -273,10 +273,24 @@ function derive(summary, { minMonths = 2 } = {}) {
   const offenAnteil =
     voll.reduce((a, m) => a + m.offen, 0) /
     Math.max(1, voll.reduce((a, m) => a + m.leben + m.auto + m.offen, 0));
+  /* Was am Monatsende übrig bleibt — und damit die einzige ehrliche Antwort auf
+     „wie viel kann ich überweisen". Einkommen minus alles, was tatsächlich abfließt,
+     einschließlich der noch nicht einsortierten Posten: die sind ja bezahlt worden.
+     Umbuchungen zählen nicht als Ausgabe, sie sind genau das, was hier herauskommt. */
+  const uebrig = voll.map((m) => m.einkommen - (m.leben + m.auto + m.offen));
   return {
     ok: true,
     months: voll.length,
     living: median(lebenswerte),
+    capacity: {
+      median: median(uebrig),
+      /* Der schwächste Monat entscheidet, was ein Dauerauftrag verträgt. Ein Betrag
+         über diesem Wert bedeutet in mindestens einem der erfassten Monate ein Minus
+         auf dem laufenden Konto — und das kostet Dispozinsen. */
+      min: Math.min(...uebrig),
+      max: Math.max(...uebrig),
+      months: voll.length,
+    },
     auto: median(voll.map((m) => m.auto)),
     income: median(voll.map((m) => m.einkommen)),
     /* Anteil der Abflüsse, die noch keiner Kategorie zugeordnet sind. Darüber

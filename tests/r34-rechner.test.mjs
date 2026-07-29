@@ -1505,3 +1505,52 @@ test("richtungsabhängige Regeln: Stadtkasse rein ist Geld, raus wäre Steuer", 
   assert.equal(categorise(rein).cat, "einkommen");
   assert.notEqual(categorise(raus).cat, "einkommen");
 });
+
+/* ---------------- Sparweise mit Wechsel ---------------- */
+
+test("Dauerauftrag bis zu einem Datum, danach alles Übrige", () => {
+  const basis = { saveMode: "fixed", saveFixed: 300 };
+  const nie = simulate(withState({ ...basis, saveSwitchYm: "" })).r34Month;
+  const frueh = simulate(withState({ ...basis, saveSwitchYm: ymOf(6) })).r34Month;
+  const spaet = simulate(withState({ ...basis, saveSwitchYm: ymOf(24) })).r34Month;
+  assert.ok(frueh < spaet, `früher umschalten muss früher kaufen: ${frueh} vs ${spaet}`);
+  assert.ok(spaet < nie, `irgendwann umschalten schlägt nie: ${spaet} vs ${nie}`);
+});
+
+test("leeres Wechseldatum ändert nichts", () => {
+  const a = simulate(withState({ saveMode: "fixed", saveFixed: 400 }));
+  const b = simulate(withState({ saveMode: "fixed", saveFixed: 400, saveSwitchYm: "" }));
+  assert.equal(a.r34Month, b.r34Month);
+  assert.equal(a.capAtBuy.toFixed(2), b.capAtBuy.toFixed(2));
+});
+
+test("Wechseldatum wirkt nur im Dauerauftrag-Modus", () => {
+  const a = simulate(withState({ saveMode: "auto", saveSwitchYm: ymOf(12) }));
+  const b = simulate(withState({ saveMode: "auto" }));
+  assert.equal(a.r34Month, b.r34Month);
+});
+
+test("bis zum Wechsel gilt der feste Betrag, danach der Überschuss", () => {
+  const r = simulate(
+    withState({ saveMode: "fixed", saveFixed: 200, saveSwitchYm: ymOf(6), licenseOwned: true }),
+    { path: true },
+  );
+  assert.equal(r.path[5].save, 200 + Math.max(0, r.path[5].flow - 200) * (state.saveSurplus / 100));
+  assert.equal(r.path[6].save, Math.max(0, r.path[6].flow), "ab dem Wechsel alles Übrige");
+});
+
+test("Sparkapazität: Median, schwächster und bester Monat", () => {
+  const s = summarise(readStatement(fixture("camt-umsaetze.xml")).entries);
+  const d = derive(s);
+  assert.ok(d.capacity, "Kapazität fehlt");
+  assert.equal(d.capacity.months, 2);
+  assert.ok(d.capacity.min <= d.capacity.median && d.capacity.median <= d.capacity.max);
+  /* Einnahmen minus alles, was abfließt — auch die noch nicht einsortierten Posten,
+     die sind ja bezahlt worden. Umbuchungen zählen nicht als Ausgabe. */
+  const april = s.months.find((m) => m.month === "2026-04");
+  const erwartet = april.einkommen - (april.leben + april.auto + april.offen);
+  assert.ok(
+    [d.capacity.min, d.capacity.max].some((v) => Math.abs(v - erwartet) < 0.01),
+    `${erwartet} nicht in [${d.capacity.min}, ${d.capacity.max}]`,
+  );
+});
