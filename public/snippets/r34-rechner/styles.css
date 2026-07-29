@@ -2313,3 +2313,102 @@ table.cmp.phases tr.sumline td {
   padding: 3px 8px;
   font-size: 11px;
 }
+
+
+/* ---- Ablauf in Schritten ---- */
+.steps {
+  counter-reset: schritt;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.steps > li {
+  counter-increment: schritt;
+  position: relative;
+  padding: 0 0 14px 32px;
+  border-left: 1px solid var(--line);
+  margin-left: 11px;
+}
+.steps > li:last-child {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+.steps > li::before {
+  content: counter(schritt);
+  position: absolute;
+  left: -11px;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--field);
+  border: 1px solid var(--line-strong);
+  color: var(--ink2);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+.steps > li[hidden] {
+  display: none;
+}
+.steps h4 {
+  margin: 1px 0 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.steps .stmt-actions {
+  margin-top: 10px;
+}
+
+
+/* ---- Tabellen im Auszugsleser ---- */
+.stmt-found th {
+  text-align: right;
+  font-weight: 600;
+  color: var(--ink3);
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+.stmt-found th:first-child,
+.stmt-found td:first-child {
+  text-align: left;
+}
+/* Alle Zahlenspalten rechtsbündig, nicht nur die letzte — sonst stehen Kopf und
+   Inhalt nicht übereinander. */
+.stmt-found td {
+  text-align: right;
+}
+.stmt-nums {
+  width: auto;
+  min-width: 260px;
+  margin: 8px 0;
+}
+.stmt-nums td:first-child {
+  color: var(--ink2);
+  padding-right: 18px;
+}
+/* Der Hinweis unter den Zahlen ist ein eigener Absatz, kein angehängter Satz —
+   vorher lief er ohne Umbruch in die letzte Zahl hinein („bester 417 €40 % der …"). */
+.stmt-lage {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  line-height: 1.6;
+}
+.stmt-found .warn,
+.stmt-found .mute {
+  display: block;
+  margin-top: 6px;
+}
+
+.stmt-ok {
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  border-radius: var(--r-md);
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 600;
+}

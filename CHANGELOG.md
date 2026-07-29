@@ -6,6 +6,63 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **R34-Rechner: „Lebenshaltung übernehmen" warf die ganze Auswertung weg.** Der Schritt
+  wurde durch eine Bestätigungszeile ersetzt — die eingelesenen Buchungen lagen noch im
+  Speicher, aber man kam nicht mehr an sie heran und konnte danach weder den Dauerauftrag
+  setzen noch weiter einsortieren. Übernommen wird jetzt, ohne den Schritt abzuräumen:
+  die Rückmeldung steht als eigene Zeile darüber, die Auswertung darunter bleibt stehen.
+  Dasselbe für den Dauerauftrag und für die Übernahme der Monatsstände.
+
+### Added
+- **R34-Rechner: Kategorie „einmalig" für Buchungen.** Der wichtigste Knopf in der
+  Zuordnung. Eine einmalige Anschaffung von 500 € in einem von drei Monaten hebt die
+  Lebenshaltung sonst um 167 €/M — und die schreibt der Plan fünf Jahre lang fort,
+  inflationsbereinigt. Aus einer Anschaffung werden so über zehntausend Euro, die es nie
+  gab. Einmalige Ausgaben zählen als ausgegeben, fließen aber weder in den Median der
+  Lebenshaltung noch in die monatliche Sparkapazität; sie stehen separat daneben.
+  Ein Hilfetext erklärt alle fünf Töpfe, einschließlich der Frage nach laufenden
+  Kreditraten.
+- Der Leser merkt sich, welche Zeiträume schon ausgewertet wurden (Konto, von, bis, wann
+  — nie eine Buchung) und meldet eine Wiederholung, statt sie als Neuigkeit zu behandeln.
+
+### Fixed
+- **Spaltenüberschriften standen nicht über ihren Zahlen.** Nur die letzte Spalte war
+  rechtsbündig, die Kopfzeile gar nicht.
+- **Text lief ohne Umbruch in die letzte Zahl** („bester 417 €40 % der Abflüsse …").
+- **Der Ergebnistext nannte fünf Zahlen und keinen Schluss daraus.** Jetzt: eine Tabelle
+  mit den Zahlen, darunter ein Satz, was die Lage ist und was daraus folgt — und der
+  Dauerauftrags-Knopf erscheint nur, wenn die Zahlen ihn tragen.
+- **„Lebenshaltung auf X setzen" tauchte bei jedem Einlesen wieder auf**, auch wenn der
+  Wert längst so stand. Ein Knopf, der nichts tut, ist schlimmer als keiner. Jetzt steht
+  dort entweder die Änderung („950 € → 710 €") oder der Hinweis, dass es schon passt.
+
+### Changed
+- **R34-Rechner: Kontoauszug einlesen läuft jetzt in vier sichtbaren Schritten.** Vorher
+  war das ein durchgehender Block aus Tabelle, Frage, Tabelle, einundzwanzig Zeilen mit
+  vierundachtzig Knöpfen und zwei Absätzen Text — sachlich richtig und trotzdem nicht zu
+  lesen, weil nirgends stand, was gerade dran ist. Jetzt: gelesen · Konto · einsortieren ·
+  übernehmen, nummeriert und mit eigenen Überschriften. Schritt 3 und 4 unterscheiden sich
+  je nach Kontoart; umgeschaltet wird durch Ein- und Ausblenden, damit die Auswertung beim
+  Wechsel nicht neu rechnen muss.
+- **Die Saldentabelle steht nur beim Tagesgeld.** Beim Girokonto zeigte sie Änderungen an,
+  die gar nicht vorgenommen werden — direkt über dem Satz, dass nichts übernommen wird.
+- **Offene Posten: sechs sichtbar, der Rest als eine Zahl.** Dreiundzwanzig Zeilen mit je
+  vier Knöpfen sind keine Frage, sondern eine Wand.
+- Der Hinweis auf noch nicht einsortierte Abflüsse stand zweimal, unterschiedlich
+  formuliert. Jetzt einmal, dort wo er die Entscheidung betrifft.
+- Das Etikett sagt „CAMT" statt „CAMT.053" — der Sparkassen-Export ist camt.052, und die
+  Fassungsnummer hilft beim Lesen nicht.
+
+### Fixed
+- **Textreste der Bank wurden als Empfänger angeboten.** „Lastschrift aus", „Danke Yormas"
+  und Ähnliches sind keine Namen und nicht einsortierbar; sie kommen in einen Sammeltopf
+  „ohne erkennbaren Empfänger".
+- **Ein Monat ohne einen einzigen Geldeingang zählt nicht mehr als vollständig.** Beim
+  Export bis zum 28. fehlt das Gehalt, und der Monat sah aus, als hätte man von nichts
+  gelebt — ging aber in den Median der Lebenshaltung ein. Der Rechner fragt jetzt, ob dort
+  Dateien fehlen.
+
 ### Added
 - **R34-Rechner: Dauerauftrag bis zu einem Datum.** Neues Feld „danach alles Übrige ab":
   bis dahin der feste Betrag, danach wandert wieder alles Übrige aufs Tagesgeld. Für den

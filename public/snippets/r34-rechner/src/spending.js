@@ -19,9 +19,22 @@
    einzelne Buchung.
    ============================================================ */
 
+/* Fünf Töpfe, weil sie im Modell fünf verschiedene Dinge bedeuten:
+
+   leben       — läuft jeden Monat weiter und wird auf Jahre fortgeschrieben
+   auto        — führt der Rechner schon einzeln; hier nur, damit es nicht doppelt zählt
+   einmalig    — war echtes Geld, kommt aber nicht wieder (Hardware, Möbel, Reparatur)
+   umbuchung   — eigenes Konto, gar keine Ausgabe
+   ignorieren  — soll nirgends auftauchen
+
+   Der Unterschied zwischen „einmalig" und „leben" ist der teuerste im ganzen Modul:
+   500 € Hardware in einem von drei Monaten heben die Lebenshaltung um 167 €/Monat —
+   und die schreibt der Plan dann fünf Jahre lang fort, inflationsbereinigt. Aus einer
+   einmaligen Anschaffung werden so über 10.000 €. */
 const KATEGORIEN = {
   leben: "Lebenshaltung",
   auto: "Auto",
+  einmalig: "einmalig",
   einkommen: "Einkommen",
   umbuchung: "Umbuchung",
   ignorieren: "ignorieren",
@@ -206,7 +219,17 @@ function categorise(entry, rules = []) {
 }
 
 /** Gegenparteien zusammenfassen, damit die Rückfrage nicht 24-mal dieselbe Firma zeigt. */
-const gruppenschluessel = (entry) => merchantOf(entry) || "ohne Angabe";
+/* Manche Buchungen tragen keinen Namen, nur Formulierungen der Bank. Als Gruppe
+   angeboten („Lastschrift aus", „Danke Yormas") sind sie nicht einsortierbar, weil
+   niemand weiß, worum es geht. Sie kommen in einen Sammeltopf. */
+const KEIN_NAME =
+  /^(lastschrift|gutschrift|ueberweisung|überweisung|dauerauftrag|kartenzahlung|entgelt|danke|abschluss|sepa|folgelastschrift|auszahlung|einzahlung|umsatz|betrag|zahlung)\b/i;
+
+const gruppenschluessel = (entry) => {
+  const m = merchantOf(entry);
+  if (!m || m.length < 3 || KEIN_NAME.test(m)) return "ohne erkennbaren Empfänger";
+  return m;
+};
 
 /**
  * Buchungen zu Monatswerten verdichten.
@@ -222,7 +245,16 @@ function summarise(entries, rules = []) {
     const { cat } = categorise(e, rules);
     const m =
       monate.get(e.month) ||
-      { month: e.month, leben: 0, auto: 0, einkommen: 0, umbuchung: 0, offen: 0, n: 0 };
+      {
+        month: e.month,
+        leben: 0,
+        auto: 0,
+        einmalig: 0,
+        einkommen: 0,
+        umbuchung: 0,
+        offen: 0,
+        n: 0,
+      };
     m.n++;
     if (cat === "einkommen") m.einkommen += Math.max(0, e.amt);
     else if (cat === "umbuchung") m.umbuchung += Math.abs(e.amt);
@@ -263,11 +295,18 @@ const median = (xs) => {
  * Rand des Auszugs fliegen raus — ein halber Monat sieht aus wie halbierte Kosten.
  */
 function derive(summary, { minMonths = 2 } = {}) {
-  const voll = summary.months.filter((m) => m.n >= 5);
+  /* Ein Monat ohne einen einzigen Geldeingang ist angeschnitten — beim Export bis zum
+     28. fehlt das Gehalt, und der Monat sähe aus, als hätte man von nichts gelebt. */
+  const voll = summary.months.filter((m) => m.n >= 5 && m.einkommen > 0);
   if (voll.length < minMonths)
     return {
       ok: false,
-      reason: `Für einen belastbaren Wert braucht es mindestens ${minMonths} vollständige Monate — gefunden: ${voll.length}.`,
+      reason:
+        `Für einen belastbaren Wert braucht es mindestens ${minMonths} vollständige Monate — gefunden: ${voll.length}.` +
+        (summary.months.some((m) => m.n >= 5 && !m.einkommen)
+          ? " Mindestens ein Monat hat keinen Geldeingang: fehlen dort Dateien?"
+          : ""),
+      partial: summary.months.filter((m) => m.n >= 5 && !m.einkommen).map((m) => m.month),
     };
   const lebenswerte = voll.map((m) => m.leben);
   const offenAnteil =
@@ -277,10 +316,15 @@ function derive(summary, { minMonths = 2 } = {}) {
      „wie viel kann ich überweisen". Einkommen minus alles, was tatsächlich abfließt,
      einschließlich der noch nicht einsortierten Posten: die sind ja bezahlt worden.
      Umbuchungen zählen nicht als Ausgabe, sie sind genau das, was hier herauskommt. */
+  /* Einmalige Ausgaben bleiben draußen: gefragt ist, was Monat für Monat übrig bleibt,
+     nicht was in dem Monat zufällig noch anstand. Sie werden separat ausgewiesen, denn
+     verschwunden ist das Geld trotzdem. */
   const uebrig = voll.map((m) => m.einkommen - (m.leben + m.auto + m.offen));
+  const einmalig = voll.reduce((a, m) => a + m.einmalig, 0);
   return {
     ok: true,
     months: voll.length,
+    partial: summary.months.filter((m) => m.n >= 5 && !m.einkommen).map((m) => m.month),
     living: median(lebenswerte),
     capacity: {
       median: median(uebrig),
@@ -291,6 +335,8 @@ function derive(summary, { minMonths = 2 } = {}) {
       max: Math.max(...uebrig),
       months: voll.length,
     },
+    /* Was in diesen Monaten einmalig anfiel. Steht daneben, nicht in der Lebenshaltung. */
+    oneOff: { summe: einmalig, proMonat: einmalig / voll.length },
     auto: median(voll.map((m) => m.auto)),
     income: median(voll.map((m) => m.einkommen)),
     /* Anteil der Abflüsse, die noch keiner Kategorie zugeordnet sind. Darüber

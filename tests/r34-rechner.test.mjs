@@ -1554,3 +1554,65 @@ test("Sparkapazität: Median, schwächster und bester Monat", () => {
     `${erwartet} nicht in [${d.capacity.min}, ${d.capacity.max}]`,
   );
 });
+
+test("einmalige Ausgaben blähen die Lebenshaltung nicht auf", () => {
+  /* 500 € Hardware in einem von drei Monaten heben die Lebenshaltung sonst um
+     167 €/M — und die schreibt der Plan fünf Jahre lang fort. */
+  const monate = ["2026-04", "2026-05", "2026-06"];
+  // Mindestens fünf Buchungen je Monat, sonst gilt er als angeschnitten
+  const entries = monate.flatMap((month) => [
+    { month, amt: 1900, name: "Arbeitgeber", text: "Gehalt" },
+    { month, amt: -600, name: "Hausverwaltung", text: "Miete" },
+    { month, amt: -50, name: "REWE", text: "" },
+    { month, amt: -50, name: "REWE", text: "" },
+    { month, amt: -50, name: "REWE", text: "" },
+    { month, amt: -50, name: "REWE", text: "" },
+  ]);
+  entries.push({ month: "2026-05", amt: -500, name: "Hardwarehaendler", text: "" });
+
+  const ohne = derive(summarise(entries, [{ pat: "hardwarehaendler", cat: "leben" }]));
+  const mit = derive(summarise(entries, [{ pat: "hardwarehaendler", cat: "einmalig" }]));
+  assert.equal(ohne.living, 800, "als Lebenshaltung zählt sie im Median mit");
+  assert.equal(mit.living, 800, "als einmalig bleibt der Median gleich");
+  // Aber der Mai unterscheidet sich: dort steckt sie in der Lebenshaltung
+  const s1 = summarise(entries, [{ pat: "hardwarehaendler", cat: "leben" }]);
+  const s2 = summarise(entries, [{ pat: "hardwarehaendler", cat: "einmalig" }]);
+  assert.equal(s1.months.find((m) => m.month === "2026-05").leben, 1300);
+  assert.equal(s2.months.find((m) => m.month === "2026-05").leben, 800);
+  assert.equal(s2.months.find((m) => m.month === "2026-05").einmalig, 500);
+  // und wird separat ausgewiesen, statt zu verschwinden
+  assert.equal(mit.oneOff.summe, 500);
+});
+
+test("einmalige Ausgaben fallen nicht in die monatliche Kapazität", () => {
+  const basis = (m) => [
+    { month: m, amt: 2000, name: "Arbeitgeber", text: "Gehalt" },
+    { month: m, amt: -200, name: "Hausverwaltung", text: "Miete" },
+    { month: m, amt: -200, name: "Hausverwaltung", text: "Miete" },
+    { month: m, amt: -200, name: "Hausverwaltung", text: "Miete" },
+    { month: m, amt: -100, name: "Hausverwaltung", text: "Miete" },
+    { month: m, amt: -100, name: "Hausverwaltung", text: "Miete" },
+  ];
+  const entries = ["2026-04", "2026-05"].flatMap(basis);
+  entries.push({ month: "2026-05", amt: -400, name: "Moebelhaus", text: "" });
+  const d = derive(summarise(entries, [{ pat: "moebelhaus", cat: "einmalig" }]));
+  // Gefragt ist, was Monat für Monat übrig bleibt — 1.200 €, nicht 800
+  assert.equal(d.capacity.median, 1200);
+  assert.equal(d.capacity.min, 1200);
+  assert.equal(d.oneOff.summe, 400);
+});
+
+test("ignorieren und einmalig sind nicht dasselbe", () => {
+  const e = [
+    { month: "2026-04", amt: 1000, name: "A", text: "Gehalt" },
+    { month: "2026-04", amt: -300, name: "X", text: "" },
+    { month: "2026-05", amt: 1000, name: "A", text: "Gehalt" },
+    { month: "2026-05", amt: -300, name: "X", text: "" },
+  ];
+  const einmalig = summarise(e, [{ pat: "x", cat: "einmalig" }]).months[0];
+  const egal = summarise(e, [{ pat: "x", cat: "ignorieren" }]).months[0];
+  assert.equal(einmalig.einmalig, 300, "einmalig zählt als ausgegeben");
+  assert.equal(egal.einmalig, 0, "ignoriert zählt nirgends");
+  assert.equal(einmalig.leben, 0);
+  assert.equal(egal.leben, 0);
+});

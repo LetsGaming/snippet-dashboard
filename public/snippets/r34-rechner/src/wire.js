@@ -416,9 +416,19 @@ let offeneBuchungen = [];
 let kontoTyp = "giro";
 
 /** Monatswerte, offene Posten und der abgeleitete Vorschlag. */
+/* Eine kurze Rückmeldung, die beim nächsten Zeichnen wieder verschwindet. */
+let meldung = "";
+const melde = (text) => {
+  meldung = text;
+};
+
 function zeigeUmsaetze() {
   const box = el("stmtSpend");
   if (!box) return;
+  const bestaetigung = meldung
+    ? `<div class="stmt-ok">${esc(meldung)}</div>`
+    : "";
+  meldung = "";
   const s = summarise(offeneBuchungen, ledgers.rules);
   const ab = derive(s);
 
@@ -432,32 +442,41 @@ function zeigeUmsaetze() {
 
   const knopf = (k, g, t) =>
     `<button type="button" class="act sm" data-cat="${k}" data-grp="${esc(g)}">${t}</button>`;
-  const offen = s.open
-    .map(
-      (g) =>
-        `<div class="stmt-open"><span class="so-name">${esc(g.name || "ohne Angabe")}</span>` +
-        `<span class="so-meta">${plural(g.n, "Buchung", "Buchungen")} · ${eur(g.summe)} €</span>` +
-        `<span class="so-acts">${knopf("leben", g.key, "Leben")}${knopf("auto", g.key, "Auto")}` +
-        `${knopf("umbuchung", g.key, "Umbuchung")}${knopf("ignorieren", g.key, "egal")}</span></div>`,
-    )
-    .join("");
+  /* Dreiundzwanzig Zeilen mit je vier Knöpfen sind keine Frage, sondern eine Wand.
+     Gezeigt werden die sechs, die etwas ausmachen; der Rest steht als eine Zahl da und
+     lässt sich aufklappen, wenn jemand ihn wirklich sortieren will. */
+  const SICHTBAR = 6;
+  const zeile = (g) =>
+    `<div class="stmt-open"><span class="so-name">${esc(g.name)}</span>` +
+    `<span class="so-meta">${plural(g.n, "Buchung", "Buchungen")} · ${eur(g.summe)} €</span>` +
+    `<span class="so-acts">${knopf("leben", g.key, "Leben")}${knopf("auto", g.key, "Auto")}` +
+    `${knopf("einmalig", g.key, "einmalig")}${knopf("umbuchung", g.key, "Umbuchung")}` +
+    `${knopf("ignorieren", g.key, "egal")}</span></div>`;
+  const rest = s.open.slice(SICHTBAR);
+  const offen =
+    s.open.slice(0, SICHTBAR).map(zeile).join("") +
+    (rest.length
+      ? `<details class="levrest"><summary>${plural(rest.length, "weiterer Posten", "weitere Posten")}, zusammen ${eur(rest.reduce((a, g) => a + g.summe, 0))} €</summary>${rest.map(zeile).join("")}</details>`
+      : "");
 
   box.innerHTML =
+    bestaetigung +
     `<div class="stmt-found"><b>${plural(offeneBuchungen.length, "Buchung", "Buchungen")}</b> gelesen` +
     `<table><thead><tr><th>Monat</th><th>Leben</th><th>Auto</th><th>Einkommen</th><th>offen</th></tr></thead>` +
     `<tbody>${monate}</tbody></table></div>` +
     (s.open.length
-      ? `<div class="stmt-found">Diese Empfänger kennt der Rechner nicht. Einmal einsortieren, dann merkt er sie sich.</div>${offen}`
+      ? `<div class="stmt-found">Diese Empfänger kennt der Rechner nicht. Einmal einsortieren, dann merkt er sie sich.` +
+        `<button type="button" class="hbtn" data-help="kategorien">?</button></div>${offen}`
       : `<div class="stmt-found">Alles zugeordnet.</div>`) +
     (ab.ok ? kapazitaet(ab) : "") +
-    (ab.ok
-      ? `<div class="stmt-actions"><button type="button" class="act" id="spendApply">Lebenshaltung auf ${eur(ab.living)} € setzen</button>` +
-        `<span class="stmt-hint">Median aus ${plural(ab.months, "vollem Monat", "vollen Monaten")}` +
-        (ab.openShare > 0.1
-          ? ` · <b>${Math.round(ab.openShare * 100)} % der Abflüsse noch offen</b> — erst einsortieren`
-          : "") +
-        `</span></div>`
-      : `<div class="stmt-hint">${esc(ab.reason)}</div>`);
+    (!ab.ok
+      ? `<div class="stmt-hint">${esc(ab.reason)}</div>`
+      : Math.abs(Math.round(ab.living) - state.living) < 1
+        ? /* Steht der Wert schon, ist ein Knopf, der nichts tut, schlimmer als keiner —
+             man klickt ihn, nichts passiert, und beim nächsten Einlesen wieder. */
+          `<div class="stmt-hint">Die Lebenshaltung steht bereits auf ${eur(state.living)} € — Median aus ${plural(ab.months, "vollem Monat", "vollen Monaten")}.</div>`
+        : `<div class="stmt-actions"><button type="button" class="act" id="spendApply">Lebenshaltung ${eur(state.living)} € → <b>${eur(ab.living)} €</b></button>` +
+          `<span class="stmt-hint">Median aus ${plural(ab.months, "vollem Monat", "vollen Monaten")}, ohne einmalige Ausgaben</span></div>`);
 
   box.querySelectorAll("[data-cat]").forEach((btn) =>
     btn.addEventListener("click", () => {
@@ -474,11 +493,15 @@ function zeigeUmsaetze() {
     rate.addEventListener("click", () => {
       state.saveMode = "fixed";
       state.saveFixed = Number(rate.dataset.betrag);
+      merkeImport();
       prov.saveFixed = "proof"; // aus echten Kontobewegungen, keine Schätzung
       setSeg("seg_saveMode", "fixed");
       setInput("f_saveFixed", state.saveFixed);
+      merkeImport();
       persist();
       render();
+      melde(`Dauerauftrag auf ${eur(state.saveFixed)} € gesetzt.`);
+      zeigeUmsaetze();
     });
 
   const setzen = el("spendApply");
@@ -487,12 +510,17 @@ function zeigeUmsaetze() {
       const frisch = derive(summarise(offeneBuchungen, ledgers.rules));
       if (!frisch.ok) return;
       state.living = Math.round(frisch.living);
+      merkeImport();
       prov.living = "proof"; // aus echten Buchungen, keine Schätzung mehr
       setInput("f_living", state.living);
       persist();
       render();
-      el("stmtSpend").innerHTML =
-        `<div class="stmt-found">Lebenshaltung auf ${eur(state.living)} € gesetzt.</div>`;
+      /* Neu zeichnen statt ersetzen. Vorher wurde der ganze Schritt durch eine
+         Bestätigungszeile überschrieben — die eingelesenen Buchungen lagen noch im
+         Speicher, aber man kam nicht mehr an sie heran und konnte weder den
+         Dauerauftrag setzen noch weiter einsortieren. */
+      melde(`Lebenshaltung auf ${eur(state.living)} € gesetzt.`);
+      zeigeUmsaetze();
     });
 }
 
@@ -501,21 +529,78 @@ function zeigeUmsaetze() {
  *  Der Median sagt, wie es im Normalfall aussieht; der schwächste Monat sagt, was ein
  *  Dauerauftrag verträgt. Seit das Tagesgeld eine Einbahnstraße ist, ist das kein
  *  Detail: ein Betrag über dem schwächsten Monat bedeutet Dispozinsen. */
+/** Was auf dem Etikett steht. Die Fassungsnummer (052 gegen 053) hilft beim Lesen
+ *  nicht und war im Zweifel falsch geraten — der Sparkassen-Export ist camt.052. */
+const formatName = (f) =>
+  f === "camt" ? "CAMT" : f === "csv" ? "CSV-CAMT" : "MT940";
+
+/* Was von diesem Zeitraum schon einmal eingelesen wurde. Gemerkt werden Konto und
+   Spanne, nie eine Buchung — es geht nur darum, nicht zum dritten Mal dieselbe
+   Neuigkeit zu melden. */
+let letzteEinlesung = null;
+
+function bekannt(gelesen) {
+  const konto = gelesen.accounts[0] || "";
+  const frueher = (ledgers.imports || []).filter(
+    (i) =>
+      i.account === konto && !(i.to < gelesen.from || i.from > gelesen.to),
+  );
+  letzteEinlesung = {
+    account: konto,
+    from: gelesen.from,
+    to: gelesen.to,
+    at: new Date().toISOString().slice(0, 10),
+  };
+  if (!frueher.length) return "";
+  const wann = frueher[frueher.length - 1].at;
+  return `<div class="stmt-hint">Diesen Zeitraum hast du am ${wann.split("-").reverse().join(".")} schon einmal ausgewertet. Was du unten einsortierst, gilt weiterhin.</div>`;
+}
+
+/** Erst beim Übernehmen wird die Einlesung vermerkt — Ansehen allein zählt nicht. */
+function merkeImport() {
+  if (!letzteEinlesung) return;
+  ledgers.imports = (ledgers.imports || []).filter(
+    (i) =>
+      !(
+        i.account === letzteEinlesung.account &&
+        i.from === letzteEinlesung.from &&
+        i.to === letzteEinlesung.to
+      ),
+  );
+  ledgers.imports.push(letzteEinlesung);
+}
+
 function kapazitaet(ab) {
   const k = ab.capacity;
   if (!k) return "";
   const sicher = Math.floor(Math.max(0, k.min) / 10) * 10;
-  return (
-    `<div class="stmt-found"><b>Was übrig bleibt</b> — Einnahmen minus alles, was abfließt:<br>` +
-    `Median ${eur(k.median)} € · schwächster der ${plural(k.months, "Monat", "Monate")} ${eur(k.min)} € · bester ${eur(k.max)} €` +
-    (ab.openShare > 0.1
-      ? `<span class="warn">${Math.round(ab.openShare * 100)} % der Abflüsse sind noch nicht einsortiert — die Zahl steht erst danach.</span>`
+  const offen = ab.openShare > 0.1;
+
+  /* Vorher standen hier fünf Zahlen und ein Halbsatz. Wer das liest, weiß danach nicht,
+     was er tun soll. Jetzt: ein Satz, was die Lage ist, ein Satz, was daraus folgt. */
+  const lage = offen
+    ? `Noch nicht belastbar: <b>${Math.round(ab.openShare * 100)} %</b> der Abflüsse sind nicht einsortiert. Die Zahlen unten zählen sie vorsichtshalber als Ausgabe — sortier oben ein, dann stimmen sie.`
+    : sicher > 0
+      ? `In jedem der ${plural(k.months, "erfassten Monate", "erfassten Monate")} blieben mindestens <b>${eur(k.min)} €</b> übrig. So viel trägt ein Dauerauftrag, ohne dass das Konto ins Minus geht.`
+      : `In mindestens einem Monat blieb nichts übrig (${eur(k.min)} €). Ein fester Dauerauftrag würde dort ins Minus führen und Dispozinsen kosten — „alles Übrige" passt sich an.`;
+
+  const zahlen =
+    `<table class="stmt-nums"><tbody>` +
+    `<tr><td>im Median übrig</td><td>${eur(k.median)} €</td></tr>` +
+    `<tr><td>schwächster Monat</td><td>${eur(k.min)} €</td></tr>` +
+    `<tr><td>bester Monat</td><td>${eur(k.max)} €</td></tr>` +
+    (ab.oneOff && ab.oneOff.summe > 0
+      ? `<tr><td>davon einmalig, nicht monatlich</td><td>${eur(ab.oneOff.summe)} €</td></tr>`
       : "") +
-    `</div>` +
-    (sicher > 0
-      ? `<div class="stmt-actions"><button type="button" class="act" id="rateApply" data-betrag="${sicher}">Dauerauftrag auf ${eur(sicher)} € setzen</button>` +
-        `<span class="stmt-hint">So viel war in jedem erfassten Monat da. Mehr geht im Schnitt, kostet aber in schwachen Monaten Dispozinsen.</span></div>`
-      : `<div class="stmt-hint">In mindestens einem Monat blieb nichts übrig — ein fester Dauerauftrag würde dort ins Minus führen. „Alles Übrige" passt sich an und kommt ohne Überziehung aus.</div>`)
+    `</tbody></table>`;
+
+  return (
+    `<div class="stmt-found"><b>Was übrig bleibt</b> — Einnahmen minus alles, was abfließt.` +
+    zahlen +
+    `<div class="stmt-lage">${lage}</div></div>` +
+    (!offen && sicher > 0
+      ? `<div class="stmt-actions"><button type="button" class="act" id="rateApply" data-betrag="${sicher}">Dauerauftrag auf ${eur(sicher)} € setzen</button></div>`
+      : "")
   );
 }
 
@@ -574,23 +659,22 @@ function wireStatement() {
 
     if (!gelesen.balances.length) {
       out.innerHTML =
-        `<div class="stmt-found"><b>${gelesen.format === "camt" ? "CAMT" : gelesen.format === "csv" ? "CSV-CAMT" : "MT940"}</b> · ` +
+        `<div class="stmt-found"><b>${formatName(gelesen.format)}</b> · ` +
         `${plural(gelesen.entries.length, "Buchung", "Buchungen")} gelesen, keine Kontostände enthalten.</div>` +
         `<div class="stmt-actions"><button type="button" class="act" id="stmtCancel">verwerfen</button></div>`;
       offeneBuchungen = gelesen.entries || [];
       if (offeneBuchungen.length) zeigeUmsaetze();
       el("stmtCancel").addEventListener("click", () => {
         out.innerHTML = "";
-        el("stmtSpend").innerHTML = "";
         offeneBuchungen = [];
       });
       return;
     }
     const probe = mergeBalances(ledgers.actual, gelesen.balances);
-    const bekannt = new Map(ledgers.actual.map((r) => [r.month, Number(r.amt)]));
+    const vorhandeneStaende = new Map(ledgers.actual.map((r) => [r.month, Number(r.amt)]));
     const zeilen = gelesen.balances
       .map((b) => {
-        const alt = bekannt.get(b.month);
+        const alt = vorhandeneStaende.get(b.month);
         const gleich = alt != null && Math.abs(alt - b.amt) < 0.005;
         const note = gleich
           ? "steht schon so"
@@ -605,39 +689,61 @@ function wireStatement() {
       ? `<div class="stmt-bad">${gelesen.warnings.map(esc).join(" ")}</div>`
       : "";
     const anzuwenden = probe.neu + probe.ersetzt;
+    /* Der Ablauf hat vier Schritte, also steht er auch als vier Schritte da. Vorher war
+       das ein durchgehender Block aus Tabelle, Frage, Tabelle, Liste und zwei Absätzen
+       Text — sachlich richtig und trotzdem nicht zu lesen, weil nirgends stand, was
+       gerade dran ist.
+
+       Beide Kontoarten bekommen ihre eigenen Schritte 3 und 4; umgeschaltet wird durch
+       Ein- und Ausblenden, damit die Auswertung beim Wechsel nicht neu rechnen muss. */
     out.innerHTML =
-      `<div class="stmt-found"><b>${gelesen.format === "camt" ? "CAMT.053" : "MT940"}</b> · ` +
-      `${plural(gelesen.balances.length, "Monatsstand", "Monatsstände")} von ${fmtYm(gelesen.from)} bis ${fmtYm(gelesen.to)}` +
-      (gelesen.files > 1 ? ` · aus ${gelesen.files} Dateien` : "") +
-      (gelesen.accounts.length === 1 ? ` · Konto ${esc(gelesen.accounts[0])}` : "") +
-      `<table><tbody>${zeilen}</tbody></table></div>` +
-      /* Das Soll-Ist führt den **Tagesgeldstand**. Ein Girokonto-Saldo gehört dort
-         nicht hinein: er schwankt mit Miete und Gehalt und sagt über das Ersparte
-         nichts. Umgekehrt sind die Umsätze nur auf dem Girokonto interessant — aufs
-         Tagesgeld geht nichts außer Überträgen.
+      `<ol class="steps">` +
+      `<li><h4>Datei gelesen</h4><div class="stmt-found">` +
+      `<b>${formatName(gelesen.format)}</b> · ${fmtYm(gelesen.from)} bis ${fmtYm(gelesen.to)}` +
+      (gelesen.files > 1 ? ` · ${plural(gelesen.files, "Datei", "Dateien")}` : "") +
+      (gelesen.accounts.length === 1 ? ` · ${esc(gelesen.accounts[0])}` : "") +
+      bekannt(gelesen) +
+      `</div>${hinweise}</li>` +
+
+      /* Das Soll-Ist führt den Tagesgeldstand. Ein Girokonto-Saldo gehört dort nicht
+         hinein: er schwankt mit Miete und Gehalt und sagt über das Ersparte nichts.
+         Umgekehrt sind die Umsätze nur auf dem Girokonto interessant.
 
          Geraten wird nach Buchungen je Monat: ein Girokonto hat Dutzende, ein
          Tagesgeldkonto zwei bis drei. Die Vermutung steht zur Korrektur. */
-      `<div class="stmt-typ">Welches Konto ist das?` +
+      `<li><h4>Welches Konto ist das?</h4>` +
       `<span class="seg seg-sm" id="stmtTyp">` +
       `<button type="button" data-t="giro"${kontoTyp === "giro" ? ' class="on"' : ""}>Girokonto</button>` +
       `<button type="button" data-t="tagesgeld"${kontoTyp === "tagesgeld" ? ' class="on"' : ""}>Tagesgeld</button>` +
-      `</span></div>` +
-      `<div class="stmt-hint" id="stmtGiroNote">Vom Girokonto werden die Stände nicht übernommen — der Plan misst das Tagesgeld. Ausgewertet werden unten die Ausgaben.</div>` +
-      hinweise +
+      `</span>` +
+      `<div class="stmt-hint" id="stmtGiroNote">Der Rechner liest daraus die Ausgaben. Die Kontostände bleiben außen vor — das Soll-Ist misst das Tagesgeld.</div>` +
+      `<div class="stmt-hint" id="stmtTgNote">Die Monatsstände wandern ins Soll-Ist, daran misst sich der Plan.</div></li>` +
+
+      `<li id="stepGiro"><h4>Buchungen einsortieren</h4><div id="stmtSpend"></div></li>` +
+
+      `<li id="stepTg"><h4>Stände prüfen und übernehmen</h4>` +
+      `<div class="stmt-found"><table><tbody>${zeilen}</tbody></table></div>` +
       `<div class="stmt-actions">` +
       (anzuwenden
         ? `<button type="button" class="act" id="stmtApply">${plural(anzuwenden, "Stand übernehmen", "Stände übernehmen")}</button>`
         : `<span class="stmt-hint">Alles steht bereits so im Plan.</span>`) +
-      `<button type="button" class="act" id="stmtCancel">verwerfen</button></div>`;
+      `</div></li>` +
+      `</ol>` +
+      `<div class="stmt-actions"><button type="button" class="act" id="stmtCancel">verwerfen</button></div>`;
 
     /* Umschalten blendet nur um — die Vorschau selbst bleibt stehen, damit man den
        Vergleich der Monatsstände nicht verliert. */
     const zeigeTyp = () => {
-      const note = el("stmtGiroNote");
-      const knopf = el("stmtApply");
-      if (note) note.hidden = kontoTyp !== "giro";
-      if (knopf) knopf.hidden = kontoTyp !== "tagesgeld";
+      const giro = kontoTyp === "giro";
+      for (const [id, zeigen] of [
+        ["stmtGiroNote", giro],
+        ["stmtTgNote", !giro],
+        ["stepGiro", giro],
+        ["stepTg", !giro],
+      ]) {
+        const n = el(id);
+        if (n) n.hidden = !zeigen;
+      }
     };
     el("stmtTyp").addEventListener("click", (ev) => {
       const b = ev.target.closest("button");
@@ -657,14 +763,18 @@ function wireStatement() {
         const { rows } = mergeBalances(ledgers.actual, gelesen.balances);
         ledgers.actual.length = 0;
         ledgers.actual.push(...rows);
-        out.innerHTML = `<div class="stmt-found">${plural(anzuwenden, "Stand übernommen", "Stände übernommen")}. Der Plan misst sich ab jetzt daran.</div>`;
+        merkeImport();
+        const schritt = el("stepTg");
+        if (schritt)
+          schritt.innerHTML =
+            `<h4>Stände prüfen und übernehmen</h4>` +
+            `<div class="stmt-ok">${plural(anzuwenden, "Stand übernommen", "Stände übernommen")}. Der Plan misst sich ab jetzt daran.</div>`;
         persist();
         renderLedger("actual");
         render();
       });
     el("stmtCancel").addEventListener("click", () => {
       out.innerHTML = "";
-      el("stmtSpend").innerHTML = "";
       offeneBuchungen = [];
     });
   });

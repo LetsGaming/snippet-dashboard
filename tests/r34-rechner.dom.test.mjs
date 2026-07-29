@@ -235,8 +235,9 @@ if (JSDOM) {
     await settle();
 
     const vorschau = el("stmtResult").textContent;
-    assert.match(vorschau, /CAMT\.053/);
-    assert.match(vorschau, /3 Monatsstände/);
+    assert.match(vorschau, /CAMT/);
+    assert.equal(window.document.querySelectorAll("#stmtResult .steps > li").length, 4,
+      "vier Schritte: gelesen, Konto, einsortieren, übernehmen");
     assert.match(vorschau, /DE02100100100006820101/);
     assert.equal(ledgers.actual.length, 0, "vor der Bestätigung darf nichts übernommen sein");
 
@@ -244,10 +245,14 @@ if (JSDOM) {
        die Stände übernommen werden. Umgeschaltet auf Girokonto verschwindet der Knopf,
        denn ein Girosaldo gehört nicht ins Soll-Ist. */
     assert.equal(window.document.querySelector("#stmtTyp .on").textContent, "Tagesgeld");
-    assert.equal(el("stmtApply").hidden, false);
+    assert.equal(el("stepTg").hidden, false, "Schritt „Stände übernehmen“ muss offen sein");
+    assert.equal(el("stepGiro").hidden, true, "Einsortieren gehört nicht zum Tagesgeld");
+
     window.document.querySelector('#stmtTyp [data-t="giro"]').click();
-    assert.equal(el("stmtApply").hidden, true, "vom Girokonto darf nichts übernommen werden");
+    assert.equal(el("stepTg").hidden, true, "vom Girokonto darf nichts übernommen werden");
+    assert.equal(el("stepGiro").hidden, false);
     assert.equal(el("stmtGiroNote").hidden, false);
+
     window.document.querySelector('#stmtTyp [data-t="tagesgeld"]').click();
 
     el("stmtApply").click();
@@ -291,6 +296,21 @@ if (JSDOM) {
     await settle();
     assert.ok(state.living > 700 && state.living < 800, `living=${state.living}`);
     assert.equal(prov.living, "proof");
+
+    /* Nach dem Übernehmen muss die Auswertung stehen bleiben. Vorher wurde der ganze
+       Schritt durch eine Bestätigungszeile ersetzt — die Buchungen lagen noch im
+       Speicher, aber man kam nicht mehr an sie heran. */
+    const nachher = el("stmtSpend").textContent;
+    assert.match(nachher, /gesetzt/, "eine Rückmeldung soll es geben");
+    assert.match(nachher, /Buchungen/, "die Auswertung darf nicht verschwinden");
+    assert.match(nachher, /Was übrig bleibt/, "auch die Kapazität bleibt");
+    assert.ok(
+      el("stmtSpend").querySelector("[data-cat]") || /Alles zugeordnet/.test(nachher),
+      "Einsortieren muss weiter möglich sein",
+    );
+    // Der Knopf bietet jetzt nichts Neues mehr an, statt dasselbe noch einmal
+    assert.equal(el("spendApply"), null);
+    assert.match(nachher, /steht bereits auf/);
 
     ledgers.rules.length = 0;
     ledgers.actual.length = 0;
