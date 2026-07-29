@@ -50,7 +50,11 @@ const STEER = [
       type: "seg",
       key: "saveMode",
       label: "Sparweise",
-      def: "fixed",
+      /* Vorgabe ist „alles Übrige": diese Weise kommt ohne Überziehung aus, weil sie nie
+         mehr anweist, als der Monat hergibt. Ein fester Dauerauftrag ist eine bewusste
+         Entscheidung — und seit das Tagesgeld eine Einbahnstraße ist, eine mit
+         Preisschild, wenn er zu hoch sitzt. */
+      def: "auto",
       help: "saveMode",
       prov: "preset",
       opts: [
@@ -151,6 +155,7 @@ const GROUPS = [
   },
   {
     id: "facts",
+    derived: "facts",
     title: "Deine Fakten",
     hint: "Einmal eintragen, dann stimmt der Rest",
     effect: "date",
@@ -201,20 +206,6 @@ const GROUPS = [
         help: "licence",
         prov: "guess",
       },
-      {
-        /* Eine Fahrschule schickt keine Schlussrechnung, sondern Grundgebühr,
-           Fahrstunden und Prüfungsgebühren über die ganze Ausbildungszeit. Als
-           Einmalbetrag gerechnet zeigt der Plan davor einen zu hohen Kontostand. */
-        key: "licenceMonths",
-        label: "Fahrschule läuft über",
-        unit: "Mon.",
-        def: 8,
-        min: 1,
-        max: 36,
-        hideIf: "licenseOwned",
-        help: "licence",
-        prov: "guess",
-      },
     ],
   },
 
@@ -225,6 +216,19 @@ const GROUPS = [
     effect: "date",
     derived: "saving",
     fields: [
+      {
+        /* Der Satz steht auf dem Kontoauszug. Er ist zweistellig und damit rund
+           fünfmal so hoch wie alles, was Tagesgeld einbringt — deshalb ist er der
+           teuerste Posten, den ein zu hoch gesetzter Dauerauftrag auslösen kann. */
+        key: "overdraftRate",
+        label: "Dispozins",
+        unit: "%",
+        def: 10.75,
+        min: 0,
+        max: 25,
+        help: "overdraft",
+        prov: "guess",
+      },
       {
         key: "saveRate",
         min: 0,

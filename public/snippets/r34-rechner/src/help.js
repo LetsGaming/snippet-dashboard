@@ -261,6 +261,10 @@ const HELP = {
       },
     ],
   },
+  overdraft: {
+    t: "Dispozins",
+    b: "Was die Bank für ein Minus auf dem laufenden Konto nimmt. Der Satz steht auf deinem Kontoauszug — bei der Sparkasse Celle-Gifhorn-Wolfsburg sind es 10,75 %.<br><br>Er ist rund fünfmal so hoch wie alles, was Tagesgeld einbringt. Deshalb ist eine Überziehung der teuerste Weg, einen Sparplan einzuhalten.<br><br><b>Warum das hier steht:</b> Das Tagesgeld ist eine Einbahnstraße. Was einmal dort liegt, gehört dem R34 — der Rechner holt es nicht zurück, wenn der Monat knapp wird. Ein zu hoch gesetzter Dauerauftrag führt deshalb nicht zu einem stillen Ausgleich, sondern zu einem Minus, und das kostet.<br><br>Reicht die Überziehung über zwei bis drei Monatsnettos hinaus, meldet der Rechner den Plan als nicht erreichbar. So viel räumt keine Bank ein.",
+  },
   saveRate: {
     t: "Tagesgeldzins",
     b: "Vorbelegt mit dem EZB-Einlagesatz minus 0,25 Punkte, weil gute Tagesgeldangebote erfahrungsgemäß knapp darunter liegen. Auf dem Girokonto sind es 0.<br><br>Der Rechner schreibt die Zinsen monatlich auf das Ersparte gut. Über drei Jahre Ansparphase macht das etwa einen Monat beim Termin aus.",

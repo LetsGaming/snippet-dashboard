@@ -3,6 +3,7 @@ import {
   SIM_HORIZON_MONTHS,
   SIM_TAIL_MONTHS,
   DAILY_FORCE_AFTER,
+  LICENCE_MAX_MONTHS,
 } from "./config.js";
 import { clamp, annuity, growth } from "./format.js";
 import { dat } from "./calendar.js";
@@ -95,10 +96,11 @@ function simulate(s, ov = {}) {
      Zahlung dann ganz aus, weil die Schleife bei null beginnt. */
   const shocks = Array.isArray(ov.events) ? ov.events : [];
   const licEnd = s.licenseOwned ? -1 : Math.max(0, licM);
-  const licSpread = Math.max(
-    1,
-    Math.min(Math.round(s.licenceMonths) || 1, licEnd + 1),
-  );
+  /* Der Zahlungszeitraum folgt aus dem Prüfungstermin: von heute bis zur Prüfung, denn
+     bis dahin ist die Ausbildung bezahlt. Das war vorher ein eigenes Feld — eine Frage,
+     deren Antwort bereits im Termin steht. Nur die Obergrenze bleibt: steht die Prüfung
+     weiter als ein Jahr weg, beginnt die Fahrschule später statt heute. */
+  const licSpread = Math.max(1, Math.min(licEnd + 1, LICENCE_MAX_MONTHS));
   const licFrom = Math.max(0, licEnd - licSpread + 1);
   const licRate = s.licenseOwned ? 0 : (s.licence || 0) / licSpread;
 
@@ -121,6 +123,10 @@ function simulate(s, ov = {}) {
   let minGiro = 0;
   let negMonths = 0;
   let overdraftMonths = 0;
+  let overdraftCost = 0;
+  let overdraftPeak = 0;
+  let brokeOff = false;
+  const limit = 3 * Math.max(0, s.netNow || 0);
   let savedTotal = 0;
   let interestEarned = 0;
   let capAtBuy = 0;
@@ -144,16 +150,15 @@ function simulate(s, ov = {}) {
     giro -= rest;
     if (r34Month == null) giroCover -= rest;
   };
-  /** Ein negatives laufendes Konto holt man sich früher oder später vom Tagesgeld zurück.
-   *  Der Betrag wird mitgeschrieben: sonst zählt er als Einzahlung, die nie liegen bleibt. */
-  const settle = () => {
-    if (giro >= 0 || cap <= 0) return;
-    const cover = Math.min(cap, -giro);
-    cap -= cover;
-    giro += cover;
-    coverThisMonth += cover;
-    if (r34Month == null) giroCover += cover;
-  };
+  /* Das Tagesgeld ist eine Einbahnstraße. Was einmal dort liegt, gehört dem R34 und
+     steht dem Alltag nicht mehr zur Verfügung — genau so wird es geführt, und genau so
+     muss es gerechnet werden.
+
+     Vorher holte sich ein negatives laufendes Konto das Geld stillschweigend zurück.
+     Das machte einen zu hohen Dauerauftrag folgenlos: er wurde angewiesen und im selben
+     Monat kassiert, der Termin blieb gleich. In Wirklichkeit steht dann ein Dispo im
+     Raum, und der kostet. */
+  const settle = () => {};
 
   for (let m = 0; m < SIM_HORIZON_MONTHS; m++) {
     const settled =
@@ -168,6 +173,14 @@ function simulate(s, ov = {}) {
       const credit = (cap * (s.saveRate || 0)) / 100 / 12;
       cap += credit;
       if (r34Month == null) interestEarned += credit;
+    }
+    /* Ein Minus auf dem laufenden Konto kostet. Der Satz steht auf jedem Kontoauszug —
+       zweistellig, und deutlich über allem, was das Tagesgeld einbringt. Ohne diese
+       Zeile wäre eine Überziehung gratis und ein zu hoher Dauerauftrag ein Gewinn. */
+    if (giro < 0) {
+      const dispo = (-giro * (s.overdraftRate || 0)) / 100 / 12;
+      giro -= dispo;
+      overdraftCost += dispo;
     }
 
     /* Einmalige Rückschläge aus der Vorschau. Sie gehen wie jede andere Einmalzahlung
@@ -290,6 +303,15 @@ function simulate(s, ov = {}) {
        eine zu hohe Sparrate. `overdraftMonths` zählt, was danach wirklich im Minus
        bleibt, weil auch das Tagesgeld leer war. Nur das ist ein echter Dispo. */
     if (giro < -1) overdraftMonths++;
+    if (giro < overdraftPeak) overdraftPeak = giro;
+    /* Jenseits von zwei bis drei Monatsnettos räumt keine Bank mehr ein. Ohne diese
+       Grenze könnte ein zu hoher Dauerauftrag das Sparen vollständig über den Dispo
+       finanzieren und „kaufte" selbst bei fünftausend Euro Lebenshaltung — das Geld
+       landet ja auf dem Tagesgeld, und von dort kommt es nicht zurück. */
+    if (r34Month == null && giro < -limit) {
+      brokeOff = true;
+      break;
+    }
 
     /* Was vom Monatsfluss neben dem Sparen übrig bleibt. Gemessen gegen den
        Dauerauftrag, nicht gegen den Kontostand: Führerschein und Autokauf sind
@@ -392,6 +414,13 @@ function simulate(s, ov = {}) {
     minGiro,
     negMonths,
     overdraftMonths,
+    // Was die Überziehung über die Sparphase gekostet hat
+    overdraftCost,
+    overdraftPeak,
+    /* Banken räumen üblicherweise zwei bis drei Monatsnettos ein. Was darüber
+       hinausgeht, ist kein Plan mehr, sondern eine Kündigung mit Ansage — der
+       Kauftermin wäre dann nur mit einer Überziehung erreichbar, die es nicht gibt. */
+    overdrawn: brokeOff || overdraftPeak < -limit,
     path,
   };
 }

@@ -117,13 +117,37 @@ test("laufende Kosten beginnen im Kaufmonat, nicht danach", () => {
   }
 });
 
-test("was liegen bleibt ist nie mehr als was angewiesen wurde", () => {
-  const r = simulate(withState({ saveFixed: 1500 }), { path: true });
-  for (const p of r.path) assert.ok(p.net <= p.save + 1e-9);
-  assert.ok(
-    r.path.some((p) => p.net < p.save - 1),
-    "bei zu hohem Dauerauftrag muss ein Ausgleich stattfinden",
-  );
+test("das Tagesgeld ist eine Einbahnstraße", () => {
+  /* Was angewiesen wird, bleibt liegen — auch wenn der Monat es nicht hergibt. Dann
+     steht ein Minus auf dem laufenden Konto, und das kostet Dispozinsen. Vorher holte
+     sich das Modell die Differenz still zurück und machte einen zu hohen Dauerauftrag
+     folgenlos. */
+  const r = simulate(withState({ saveMode: "fixed", saveFixed: 1200 }), { path: true });
+  for (const p of r.path) assert.equal(p.net, p.save, `m=${p.m}`);
+  assert.ok(r.overdraftMonths > 0, "der Engpass muss als Minus sichtbar werden");
+  assert.ok(r.overdraftCost > 0, "und Dispozinsen kosten");
+});
+
+test("ein zu hoher Dauerauftrag ist irgendwann kein Plan mehr", () => {
+  const machbar = simulate(withState({ saveMode: "fixed", saveFixed: 600 }));
+  const nicht = simulate(withState({ saveMode: "fixed", saveFixed: 1500 }));
+  assert.equal(machbar.overdrawn, false);
+  assert.equal(nicht.overdrawn, true, "über drei Monatsnettos räumt keine Bank ein");
+  assert.equal(nicht.r34Month, null, "ein nicht finanzierbarer Plan hat kein Datum");
+});
+
+test("alles Übrige zurücklegen kommt ohne Überziehung aus", () => {
+  const r = simulate(withState({ saveMode: "auto" }));
+  assert.equal(r.overdraftMonths, 0);
+  assert.equal(r.overdraftCost, 0);
+  assert.equal(r.overdrawn, false);
+});
+
+test("Dispozinsen wachsen mit dem Satz", () => {
+  const guenstig = simulate(withState({ saveMode: "fixed", saveFixed: 700, overdraftRate: 5 }));
+  const teuer = simulate(withState({ saveMode: "fixed", saveFixed: 700, overdraftRate: 14 }));
+  assert.ok(teuer.overdraftCost > guenstig.overdraftCost * 1.5);
+  assert.equal(simulate(withState({ saveMode: "fixed", saveFixed: 700, overdraftRate: 0 })).overdraftCost, 0);
 });
 
 /* ---------------- Kaufentscheidung ---------------- */
@@ -678,7 +702,6 @@ test("Führerschein wird über die Ausbildungszeit verteilt, nicht auf einen Mon
       cap: 20000,
       saveRate: 0,
       licenceYm: "2027-09",
-      licenceMonths: 8,
       licence: 3200,
       // Das Alltagsauto wird im selben Monat fällig wie die Prüfung — hier soll aber
       // nur der Führerschein am Konto zu sehen sein.
@@ -688,14 +711,15 @@ test("Führerschein wird über die Ausbildungszeit verteilt, nicht auf einen Mon
     { path: true },
   );
   const licM = idxFromYm("2027-09");
-  const rate = 3200 / 8;
+  // Der Zeitraum folgt dem Termin: 14 Monate voraus, gedeckelt auf zwölf
+  const rate = 3200 / 12;
   // Der Abfluss muss über acht Monate laufen und mit dem Prüfungstermin enden
   /* Die Fahrschule läuft über die Monatskosten, nicht über das Tagesgeld: sie
      drückt `flow`, nicht den Kontostand direkt. */
   const frei = (m) => r.path[m].flow;
-  for (let m = licM - 7; m <= licM; m++)
+  for (let m = licM - 11; m <= licM; m++)
     assert.ok(
-      Math.abs(frei(m - 1) - frei(m) - rate) < 5 || m > licM - 7,
+      Math.abs(frei(m - 1) - frei(m) - rate) < 5 || m > licM - 11,
       `Monat ${m}: flow fiel nicht um die Rate`,
     );
   assert.ok(
@@ -703,18 +727,17 @@ test("Führerschein wird über die Ausbildungszeit verteilt, nicht auf einen Mon
     "nach der Prüfung muss der Spielraum um die Rate zurückkommen",
   );
   assert.ok(
-    frei(licM - 8) - frei(licM) > rate - 5,
+    frei(licM - 12) - frei(licM) > rate - 5,
     "während der Ausbildung muss spürbar weniger übrig sein",
   );
   assert.ok(Math.abs(r.oneOffs.licence - 3200) < 0.01, "die Summe muss gleich bleiben");
 });
 
-test("kurzes Restfenster drängt die Summe zusammen, statt sie zu kürzen", () => {
-  // Prüfung in vier Monaten, aber acht Monate Ausbildung angesetzt
-  const r = simulate(withState({ licenceYm: "2026-11", licenceMonths: 8 }), { path: true });
+test("der Zahlungszeitraum folgt dem Prüfungstermin", () => {
+  // Prüfung in vier Monaten → fünf Zahlungsmonate, volle Summe
+  const r = simulate(withState({ licenceYm: "2026-11" }), { path: true });
   assert.ok(Math.abs(r.oneOffs.licence - state.licence) < 0.01, "nichts darf wegfallen");
-  const rate = state.licence / 5; // Monate 0 bis 4
-  assert.ok(Math.abs(rate - 700) < 1);
+  assert.ok(Math.abs(state.licence / 5 - 700) < 1);
 });
 
 test("Prüfungstermin in der Vergangenheit lässt die Zahlung nicht ausfallen", () => {
@@ -728,19 +751,23 @@ test("mit vorhandenem Führerschein fließt nichts", () => {
   assert.equal(r.oneOffs.licence, 0);
 });
 
-test("die Verteilung ändert die Summe nicht, nur den Verlauf", () => {
-  const kurz = simulate(withState({ cap: 20000, licenceYm: "2027-09", licenceMonths: 1 }), { path: true });
-  const lang = simulate(withState({ cap: 20000, licenceYm: "2027-09", licenceMonths: 12 }), { path: true });
-  assert.ok(Math.abs(kurz.oneOffs.licence - lang.oneOffs.licence) < 0.01);
-  // Verteilt liegt vor dem Termin weniger auf dem Konto
-  const licM = idxFromYm("2027-09");
-  assert.ok(lang.path[licM - 4].cap < kurz.path[licM - 4].cap, "verteilt muss früher zehren");
+test("ein weiter Termin lässt die Fahrschule später beginnen, nicht heute", () => {
+  /* Ohne Deckel würde eine Prüfung in drei Jahren die Kosten auf 36 Monate strecken —
+     niemand zahlt Fahrschulgebühren drei Jahre im Voraus. */
+  const r = simulate(withState({ cap: 20000, saveRate: 0, licenceYm: "2029-07" }), { path: true });
+  const licM = idxFromYm("2029-07");
+  const rate = state.licence / 12;
+  const fluss = (m) => r.path[m].flow;
+  assert.ok(Math.abs(fluss(licM - 12) - fluss(licM - 11) - rate) < 5, "Beginn zwölf Monate vorher");
+  // Zwei Monate vor dem Fenster unterscheiden sich nur um die Inflation
+  assert.ok(Math.abs(fluss(licM - 13) - fluss(licM - 12)) < 5, "davor fließt nichts");
+  assert.ok(Math.abs(r.oneOffs.licence - state.licence) < 0.01);
 });
 
 /* ---------------- Was zum Leben bleibt ---------------- */
 
 test("freies Geld misst gegen den Dauerauftrag, nicht gegen Einmalzahlungen", () => {
-  const r = simulate(withState(), { path: true });
+  const r = simulate(withState({ saveMode: "fixed" }), { path: true });
   assert.ok(r.free != null && r.freeAvg != null);
   for (const p of r.path.slice(0, r.r34Month))
     assert.ok(r.free <= p.flow - p.save + 1e-9, "free muss das Minimum sein");
@@ -756,8 +783,8 @@ test("freies Geld misst gegen den Dauerauftrag, nicht gegen Einmalzahlungen", ()
 });
 
 test("zu hoher Dauerauftrag zeigt sich als negativer Spielraum", () => {
-  const knapp = simulate(withState({ saveFixed: 700 }));
-  const frei = simulate(withState({ saveFixed: 300 }));
+  const knapp = simulate(withState({ saveMode: "fixed", saveFixed: 700 }));
+  const frei = simulate(withState({ saveMode: "fixed", saveFixed: 300 }));
   assert.ok(knapp.free < 0, `engster Monat ${knapp.free?.toFixed(0)} €`);
   assert.ok(frei.free > knapp.free, "weniger Dauerauftrag muss mehr Luft lassen");
 });
@@ -914,7 +941,7 @@ test("Migration hebt das alte Feldpaar in die Liste", () => {
 });
 
 test("das laufende Konto trägt nichts über den Monat hinaus", () => {
-  const r = simulate(withState({ saveFixed: 1500 }), { path: true });
+  const r = simulate(withState({ saveMode: "fixed", saveFixed: 1500 }), { path: true });
   for (const p of r.path)
     assert.ok(
       p.giro <= 0.01,
@@ -1111,9 +1138,14 @@ test("ein früherer Führerschein macht den Plan nicht reicher", () => {
      laufenden Konto, wenn dort noch nichts lag — und wurde aus dem Haushaltsüberschuss
      getilgt, der sonst als verbraucht gilt. Ein früher Schein war dadurch billiger als
      ein später, und das Kapital verlief U-förmig statt monoton. */
-  const capBei = (licenceYm) =>
-    simulate({ ...withState({ dailyYm: "2027-05", car: 1e9 }), licenceYm }, { path: true })
-      .path[60].cap;
+  /* Gemessen wird das Vermögen, nicht der Kontostand: seit das Tagesgeld eine
+     Einbahnstraße ist, kann eine gedrängte Fahrschulrate den Fehlbetrag in den Dispo
+     schieben, statt das Ersparte zu mindern. Wer nur  ansieht, hielte das für
+     einen Gewinn. */
+  const capBei = (licenceYm) => {
+    const p = simulate({ ...withState({ dailyYm: "2027-05", car: 1e9 }), licenceYm }, { path: true }).path[60];
+    return p.cap + p.giro;
+  };
   const reihe = ["2026-08", "2026-11", "2027-01", "2027-04", "2027-08"].map(capBei);
   for (let i = 1; i < reihe.length; i++)
     assert.ok(
@@ -1167,6 +1199,10 @@ test("Invarianten halten über 1500 zufällige Zustände", () => {
     });
     const r = simulate(s, { path: true });
     const bruch = (was) => brueche.push(`${was} · Lauf ${i}`);
+    /* Bricht der Lauf an der Dispogrenze ab, ist er unvollständig — dann sind
+       Einmalkosten und Rücklage naturgemäß nicht zu Ende gebucht. Geprüft werden
+       an so einem Lauf nur die Zahlen, die trotzdem gelten müssen. */
+    const abgebrochen = r.overdrawn;
 
     for (const k of ["financed", "deposited", "payment", "interest", "savedTotal",
       "interestEarned", "capAtBuy", "giroCover", "minGiro", "priceAtBuy"])
@@ -1186,25 +1222,20 @@ test("Invarianten halten über 1500 zufällige Zustände", () => {
       if (s.restGoal === "amount" && r.financed > s.restAmount + 0.02) bruch("Kreditsumme über Vorgabe");
       if (s.restGoal === "rate" && r.payment > s.restRate + 0.02) bruch("Rate über Vorgabe");
     }
-    if (!s.licenseOwned && Math.abs(r.oneOffs.licence - s.licence) > 0.02)
+    if (!abgebrochen && !s.licenseOwned && Math.abs(r.oneOffs.licence - s.licence) > 0.02)
       bruch("Führerscheinsumme unvollständig");
-    if (s.method === "cash" && r.r34Month != null
+    if (!abgebrochen && s.method === "cash" && r.r34Month != null
       && r.capAtBuy - r.deposited - r.sideAtBuy < -0.02) bruch("Rücklage unterschritten");
   }
   assert.deepEqual(brueche.slice(0, 5), [], `${brueche.length} Verletzungen`);
 });
 
-test("echter Dispo und zu hoher Dauerauftrag sind zwei verschiedene Zahlen", () => {
+test("der tiefste Stand und die Zahl der Minusmonate passen zum Verlauf", () => {
   const r = simulate(withState(), { path: true });
-  assert.equal(
-    r.overdraftMonths,
-    r.path.filter((p) => p.giro < -1).length,
-    "overdraftMonths muss zählen, was nach dem Ausgleich übrig bleibt",
-  );
+  const minus = r.path.filter((p) => p.giro < -1);
+  assert.equal(r.overdraftMonths, minus.length);
+  assert.ok(Math.abs(r.overdraftPeak - Math.min(0, ...r.path.map((p) => p.giro))) < 1);
   assert.ok(r.negMonths >= r.overdraftMonths);
-  // Bei den Vorgaben deckt das Tagesgeld alles ab — es gibt keinen Dispo
-  assert.equal(r.overdraftMonths, 0);
-  assert.ok(r.negMonths > 0, "der zu hohe Dauerauftrag muss trotzdem sichtbar bleiben");
 });
 
 /* ---------------- Kontoauszüge lesen ---------------- */

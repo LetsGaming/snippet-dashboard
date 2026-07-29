@@ -7,6 +7,7 @@ import {
   BODIES,
   PROV_META,
   isSolid,
+  LICENCE_MAX_MONTHS,
   LEFTOVER_TIGHT,
   HEAVY_DEBOUNCE_MS,
   FORECAST_DEBOUNCE_MS,
@@ -408,14 +409,17 @@ function renderHero(r) {
      selben Monat vom Tagesgeld, und das Konto steht am Monatsende auf null. Eine
      Warnung, die etwas Falsches behauptet, kostet mehr Vertrauen als sie einbringt. */
   const warn =
-    r.overdraftMonths > 0
-      ? `<div class="hwarn">⚠ In <b>${plural(r.overdraftMonths, "Monat", "Monaten")}</b> reicht
-         auch das Tagesgeld nicht, tiefstens <b>${eur(r.minGiro)} €</b>. Dispozinsen sind nicht gerechnet.</div>`
+    r.overdrawn
+      ? `<div class="hwarn">⚠ Dieser Plan setzt eine Überziehung von <b>${eur(-r.overdraftPeak)} €</b> voraus.
+         Banken räumen zwei bis drei Monatsnettos ein — der Termin oben ist damit nicht erreichbar.
+         Setz den Dauerauftrag herunter oder die Lebenshaltung realistisch an.</div>`
+      : r.overdraftMonths > 0
+      ? `<div class="hwarn">⚠ Das laufende Konto steht <b>${plural(r.overdraftMonths, "Monat", "Monate")}</b>
+         im Minus, tiefstens <b>${eur(r.overdraftPeak)} €</b> — das kostet <b>${eur(r.overdraftCost)} €</b>
+         Dispozinsen bis zum Kauf. Vom Tagesgeld kommt nichts zurück: was dort liegt, gehört dem R34.</div>`
       : r.negMonths > 0
         ? `<div class="hwarn">⚠ In <b>${plural(r.negMonths, "Monat", "Monaten")}</b> gibt der Monat
-           den Dauerauftrag nicht her — bis zu <b>${eur(-r.minGiro)} €</b> kommen dann vom Tagesgeld
-           zurück. Der Termin ändert sich dadurch nicht, aber ${eur(state.saveFixed)} € sind nicht
-           der Betrag, den du wirklich zurücklegen kannst.</div>`
+           den Dauerauftrag von ${eur(state.saveFixed)} € nicht her.</div>`
       : "";
 
   box.className = "hero";
@@ -1200,6 +1204,24 @@ function rememberVisit() {
 
 /* ---- abgeleitete Zeilen ---- */
 function renderDerived(s, r) {
+  /* Der Zahlungszeitraum der Fahrschule ist abgeleitet, nicht eingegeben — das war
+     vorher ein eigenes Feld und ist eine Frage, deren Antwort schon im Prüfungstermin
+     steht. Genau deshalb muss die Annahme sichtbar sein: eine Zahl, die niemand mehr
+     eintippt und auch nirgends liest, ist eine Falle. */
+  const derF = el("der_facts");
+  if (derF) {
+    const licM = Math.max(0, licenceMonth(s));
+    const spanne = Math.max(1, Math.min(licM + 1, LICENCE_MAX_MONTHS));
+    derF.innerHTML = s.licenseOwned
+      ? "Führerschein vorhanden — keine Ausbildungskosten im Plan."
+      : `Fahrschule: <b>${eur(s.licence)} €</b> über ${plural(spanne, "Monat", "Monate")} bis ${dat(licM)} = <b>${eur(s.licence / spanne)} €/M</b>` +
+        `<span class="mute">Gerechnet wird von heute bis zur Prüfung — bis dahin ist die Ausbildung bezahlt. ` +
+        (licM + 1 > LICENCE_MAX_MONTHS
+          ? `Bei einem Termin so weit voraus beginnt die Fahrschule erst ${dat(licM - LICENCE_MAX_MONTHS + 1)}.`
+          : "Läuft die Ausbildung schon, trag oben nur ein, was noch offen ist.") +
+        "</span>";
+  }
+
   const buyMonth = r.r34Month ?? Math.max(0, idxFromYm(s.startYm) ?? 0);
   const longMonth = Math.max(buyMonth, age25Month(s), hMonth(s)) + 120;
   const hm = hMonth(s);

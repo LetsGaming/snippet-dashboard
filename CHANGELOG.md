@@ -6,6 +6,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **R34-Rechner: „Fahrschule läuft über X Monate" ist weg.** Das Feld verlangte eine
+  Entscheidung, deren Antwort schon im Prüfungstermin steht: bis zum Abschluss ist die
+  Ausbildung bezahlt, also ist der Zeitraum von heute bis dahin. Gerechnet wird jetzt so,
+  mit einer Obergrenze von zwölf Monaten — länger vor der Prüfung zahlt niemand
+  Fahrschulgebühren, und die Theorieprüfung verfällt ohnehin nach einem Jahr. Steht der
+  Termin weiter weg, beginnt die Ausbildung später statt heute.
+  Die Annahme steht sichtbar unter „Deine Fakten" („3.500 € über 5 Monate bis 11/2026 =
+  700 €/M"), denn eine abgeleitete Zahl, die niemand mehr eintippt und auch nirgends
+  liest, ist eine Falle.
+
+### Fixed
+- **R34-Rechner: das Tagesgeld ist eine Einbahnstraße.** Bisher holte sich ein negatives
+  laufendes Konto das Geld stillschweigend vom Tagesgeld zurück. Das machte einen zu
+  hohen Dauerauftrag folgenlos: angewiesen, im selben Monat kassiert, Termin unverändert.
+  In Wirklichkeit steht dann ein Dispo im Raum — auf dem Kontoauszug der Sparkasse
+  Celle-Gifhorn-Wolfsburg mit **10,75 %**, rund fünfmal so viel wie Tagesgeld einbringt.
+  Neues Feld „Dispozins", die Kosten werden mitgerechnet und im Ergebnis genannt.
+  Reicht die Überziehung über drei Monatsnettos hinaus, gibt es keinen Kauftermin mehr:
+  so viel räumt keine Bank ein.
+- **Kontoauszüge werden nach Konto unterschieden.** Ein Girokonto-Saldo im Soll-Ist wäre
+  schlicht die falsche Zahl — dort steht der Tagesgeldstand. Der Rechner rät den Kontotyp
+  an der Zahl der Buchungen je Monat (Giro: Dutzende, Tagesgeld: zwei bis drei) und lässt
+  sich korrigieren. Vom Girokonto werden nur die Ausgaben ausgewertet, keine Stände
+  übernommen.
+
+### Changed
+- Vorgabe der Sparweise ist „alles Übrige". Diese Weise kommt ohne Überziehung aus, weil
+  sie nie mehr anweist, als der Monat hergibt. Ein fester Dauerauftrag bleibt möglich —
+  jetzt aber mit Preisschild, wenn er zu hoch sitzt.
+
 ### Fixed
 - **R34-Rechner: Kontoauszugsleser an echten Sparkassen-Exporten geradegezogen.** Fünf
   Fehler, die nur mit echten Dateien auffielen:

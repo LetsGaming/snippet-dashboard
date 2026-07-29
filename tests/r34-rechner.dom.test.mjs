@@ -137,9 +137,11 @@ if (JSDOM) {
     const hero = el("hero").textContent;
     assert.match(hero, /Bis dahin frei/);
     assert.match(hero, /Danach frei im Monat/);
-    // Bei den Vorgaben ist der engste Monat die Fahrschulzeit
-    assert.match(hero, /Fahrschule läuft bis/);
-    assert.ok(el("f_licenceMonths"), "Feld für die Ausbildungsdauer fehlt");
+    // Der engste Monat wird eingeordnet — womit, hängt an der Sparweise
+    assert.match(hero, /engster Monat/);
+    // Die Ausbildungsdauer ist abgeleitet, nicht eingegeben — aber sichtbar
+    assert.ok(!el("f_licenceMonths"), "das Feld sollte weg sein");
+    assert.match(el("der_facts").textContent, /Fahrschule: .* über .* = .*€\/M/);
   });
 
   test("Hilfetexte stehen einmal je Bereich, nicht an jedem Feld", async () => {
@@ -237,6 +239,16 @@ if (JSDOM) {
     assert.match(vorschau, /3 Monatsstände/);
     assert.match(vorschau, /DE02100100100006820101/);
     assert.equal(ledgers.actual.length, 0, "vor der Bestätigung darf nichts übernommen sein");
+
+    /* Eine Datei mit wenigen Buchungen je Monat ist ein Tagesgeldkonto — dort dürfen
+       die Stände übernommen werden. Umgeschaltet auf Girokonto verschwindet der Knopf,
+       denn ein Girosaldo gehört nicht ins Soll-Ist. */
+    assert.equal(window.document.querySelector("#stmtTyp .on").textContent, "Tagesgeld");
+    assert.equal(el("stmtApply").hidden, false);
+    window.document.querySelector('#stmtTyp [data-t="giro"]').click();
+    assert.equal(el("stmtApply").hidden, true, "vom Girokonto darf nichts übernommen werden");
+    assert.equal(el("stmtGiroNote").hidden, false);
+    window.document.querySelector('#stmtTyp [data-t="tagesgeld"]').click();
 
     el("stmtApply").click();
     await settle();

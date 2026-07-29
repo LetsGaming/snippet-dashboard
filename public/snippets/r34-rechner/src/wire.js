@@ -413,6 +413,7 @@ const CODE_LOOKS_RIGHT = /^\s*R34[01]:/;
 /* Die gelesenen Buchungen leben nur so lange, wie der Bereich offen ist. Sie werden
    nicht gespeichert — gemerkt wird am Ende die Regel, nicht die Buchung. */
 let offeneBuchungen = [];
+let kontoTyp = "giro";
 
 /** Monatswerte, offene Posten und der abgeleitete Vorschlag. */
 function zeigeUmsaetze() {
@@ -525,6 +526,16 @@ function wireStatement() {
 
     /* Vorschau gegen den vorhandenen Bestand: was ist neu, was ersetzt einen Wert, was
        steht schon genauso da. Sonst bestätigt man blind. */
+    /* Welches Konto ist das? Die Frage ist nicht kosmetisch: das Soll-Ist führt den
+       **Tagesgeldstand**, und ein Girokonto-Saldo dort wäre schlicht die falsche Zahl.
+       Umgekehrt sind die Umsätze nur auf dem Girokonto interessant — aufs Tagesgeld
+       geht nichts als Überträge.
+
+       Geraten wird nach der Zahl der Buchungen je Monat: ein Girokonto hat Dutzende,
+       ein Tagesgeldkonto zwei bis drei. Die Vermutung steht zur Korrektur bereit. */
+    const monate = new Set(gelesen.entries.map((e) => e.month)).size || 1;
+    kontoTyp = gelesen.entries.length / monate > 6 ? "giro" : "tagesgeld";
+
     if (!gelesen.balances.length) {
       out.innerHTML =
         `<div class="stmt-found"><b>${gelesen.format === "camt" ? "CAMT" : gelesen.format === "csv" ? "CSV-CAMT" : "MT940"}</b> · ` +
@@ -564,6 +575,19 @@ function wireStatement() {
       (gelesen.files > 1 ? ` · aus ${gelesen.files} Dateien` : "") +
       (gelesen.accounts.length === 1 ? ` · Konto ${esc(gelesen.accounts[0])}` : "") +
       `<table><tbody>${zeilen}</tbody></table></div>` +
+      /* Das Soll-Ist führt den **Tagesgeldstand**. Ein Girokonto-Saldo gehört dort
+         nicht hinein: er schwankt mit Miete und Gehalt und sagt über das Ersparte
+         nichts. Umgekehrt sind die Umsätze nur auf dem Girokonto interessant — aufs
+         Tagesgeld geht nichts außer Überträgen.
+
+         Geraten wird nach Buchungen je Monat: ein Girokonto hat Dutzende, ein
+         Tagesgeldkonto zwei bis drei. Die Vermutung steht zur Korrektur. */
+      `<div class="stmt-typ">Welches Konto ist das?` +
+      `<span class="seg seg-sm" id="stmtTyp">` +
+      `<button type="button" data-t="giro"${kontoTyp === "giro" ? ' class="on"' : ""}>Girokonto</button>` +
+      `<button type="button" data-t="tagesgeld"${kontoTyp === "tagesgeld" ? ' class="on"' : ""}>Tagesgeld</button>` +
+      `</span></div>` +
+      `<div class="stmt-hint" id="stmtGiroNote">Vom Girokonto werden die Stände nicht übernommen — der Plan misst das Tagesgeld. Ausgewertet werden unten die Ausgaben.</div>` +
       hinweise +
       `<div class="stmt-actions">` +
       (anzuwenden
@@ -571,8 +595,23 @@ function wireStatement() {
         : `<span class="stmt-hint">Alles steht bereits so im Plan.</span>`) +
       `<button type="button" class="act" id="stmtCancel">verwerfen</button></div>`;
 
-    /* Umsätze sind der zweite Schritt und bewusst getrennt: die Salden nützen sofort,
-       die Kategorisierung braucht Zuwendung. Wer nur die Stände will, ist hier fertig. */
+    /* Umschalten blendet nur um — die Vorschau selbst bleibt stehen, damit man den
+       Vergleich der Monatsstände nicht verliert. */
+    const zeigeTyp = () => {
+      const note = el("stmtGiroNote");
+      const knopf = el("stmtApply");
+      if (note) note.hidden = kontoTyp !== "giro";
+      if (knopf) knopf.hidden = kontoTyp !== "tagesgeld";
+    };
+    el("stmtTyp").addEventListener("click", (ev) => {
+      const b = ev.target.closest("button");
+      if (!b) return;
+      kontoTyp = b.dataset.t;
+      setSeg("stmtTyp", kontoTyp);
+      zeigeTyp();
+    });
+    zeigeTyp();
+
     offeneBuchungen = gelesen.entries || [];
     if (offeneBuchungen.length) zeigeUmsaetze();
 

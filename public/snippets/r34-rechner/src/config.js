@@ -31,6 +31,12 @@ const SEASON_MAX = 11;
  *  Feld befüllt, landet im Jahr 85359. Deshalb immer erst gegen NEVER prüfen. */
 const NEVER = 1e6;
 
+/* Länger als ein Jahr vor der Prüfung zahlt niemand Fahrschulgebühren — die
+   Theorieprüfung verfällt nach zwölf Monaten, und so lange hält auch keine Fahrschule
+   den Vertrag offen. Steht die Prüfung weiter weg, beginnt die Ausbildung eben später
+   statt heute. */
+const LICENCE_MAX_MONTHS = 12;
+
 const SF_CURVES = {
   Fahranfänger: [2.3, 1.8, 1.5, 1.3, 1.15],
   Zweitwagen: [1.3, 1.2, 1.1],
@@ -138,6 +144,7 @@ export {
   SEASON_MIN,
   SEASON_MAX,
   NEVER,
+  LICENCE_MAX_MONTHS,
   SF_CURVES,
   sfAt,
   BAND_WEIGHT,
