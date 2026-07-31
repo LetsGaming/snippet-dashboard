@@ -2,7 +2,7 @@ import { state, prov, runtime, initState } from "./state.js";
 import { ledgers, doneTasks } from "./ledgers.js";
 import { ALLFIELDS, STEER, GROUPS, LEDGERS } from "./catalog.js";
 import { seasonMonths } from "./state.js";
-import { planSnapshot, applySnapshot } from "./store.js";
+import { planSnapshot, applySnapshot } from "./snapshot.js";
 import { openTasks, TASKS } from "./tasks.js";
 import { HELP } from "./help.js";
 import { BODIES } from "./config.js";

@@ -269,7 +269,13 @@ function summarise(entries, rules = []) {
       g.n++;
       g.summe += Math.abs(e.amt);
       offen.set(k, g);
-    } else m[cat] += Math.max(0, -e.amt);
+    } else {
+      /* Netto, nicht nur der Abfluss: eine Erstattung mindert die Kategorie, in die
+         sie gehört. Vorher fiel jede Gutschrift unter `Math.max(0, -amt)` heraus —
+         eine Retoure erhöhte die Lebenshaltung, weil der Kauf zählte und das Geld
+         zurück nicht. */
+      m[cat] -= e.amt;
+    }
     monate.set(e.month, m);
   }
   return {

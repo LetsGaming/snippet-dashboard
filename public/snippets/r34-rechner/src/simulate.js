@@ -47,7 +47,7 @@ function simulate(s, ov = {}) {
   const collectPath = !!ov.path;
 
   const dailyFirst = s.strat === "dailyfirst";
-  const steps = incomeSteps(s);
+  const steps = incomeSteps();
   const anchor = incomeAnchor(s);
   const licM = licenceMonth(s);
   const hm = hMonth(s);
@@ -135,8 +135,9 @@ function simulate(s, ov = {}) {
   let savedTotal = 0;
   let interestEarned = 0;
   let capAtBuy = 0;
-  let giroCover = 0;
-  let coverThisMonth = 0;
+  /* Was das laufende Konto für eine Einmalzahlung vorgestreckt hat, bis zum Kauf.
+     Immer ≤ 0: das Tagesgeld ist eine Einbahnstraße, zurück fließt nichts. */
+  let giroFronted = 0;
   const oneOffs = { licence: 0, daily: 0, r34Extra: 0, hCert: 0 };
   const path = collectPath ? [] : null;
 
@@ -153,26 +154,14 @@ function simulate(s, ov = {}) {
     const rest = amount - fromCap;
     if (rest === 0) return;
     giro -= rest;
-    if (r34Month == null) giroCover -= rest;
+    if (r34Month == null) giroFronted -= rest;
   };
-  /* Das Tagesgeld ist eine Einbahnstraße. Was einmal dort liegt, gehört dem R34 und
-     steht dem Alltag nicht mehr zur Verfügung — genau so wird es geführt, und genau so
-     muss es gerechnet werden.
-
-     Vorher holte sich ein negatives laufendes Konto das Geld stillschweigend zurück.
-     Das machte einen zu hohen Dauerauftrag folgenlos: er wurde angewiesen und im selben
-     Monat kassiert, der Termin blieb gleich. In Wirklichkeit steht dann ein Dispo im
-     Raum, und der kostet. */
-  const settle = () => {};
-
   for (let m = 0; m < SIM_HORIZON_MONTHS; m++) {
     const settled =
       r34Month != null &&
       dailyMonth != null &&
       m > Math.max(r34Month + (finance ? term * 12 : 0), hm) + SIM_TAIL_MONTHS;
     if (settled) break;
-
-    coverThisMonth = 0;
 
     if (cap > 0) {
       const credit = (cap * (s.saveRate || 0)) / 100 / 12;
@@ -249,7 +238,7 @@ function simulate(s, ov = {}) {
           /* Kaufmonat setzen, BEVOR gezahlt wird. `capAtBuy` ist oben schon
              festgehalten; deckt das Tagesgeld die Nebenkosten nicht, schiebt `spend`
              den Rest aufs laufende Konto. Solange r34Month noch null wäre, liefe das
-             als `giroCover` in die Aufstellung ein — die aber im Kaufmoment endet.
+             als `giroFronted` in die Aufstellung ein — die aber im Kaufmoment endet.
              Die Zeilen gingen dann um genau diesen Rest nicht auf. */
           r34Month = m;
           spend(deposit + side);
@@ -299,10 +288,8 @@ function simulate(s, ov = {}) {
     cap += toSavings;
     giro += flow - toSavings;
     if (stillSaving) savedTotal += toSavings;
-    // Erst messen, dann ausgleichen — sonst bliebe eine zu hohe Sparrate unsichtbar.
     if (giro < minGiro) minGiro = giro;
     if (giro < -1) negMonths++;
-    settle();
     /* Zwei verschiedene Dinge, die vorher eine Zahl waren: `negMonths` zählt Monate,
        in denen der Dauerauftrag mehr wollte als übrig war — das ist ein Hinweis auf
        eine zu hohe Sparrate. `overdraftMonths` zählt, was danach wirklich im Minus
@@ -333,25 +320,15 @@ function simulate(s, ov = {}) {
       freeMonths++;
     }
 
-    /* Was nach dem Ausgleich noch auf dem laufenden Konto liegt, ist ausgegeben —
-       so steht es in der Annahme, und so wird es jetzt auch gebucht. Vorher wuchs
-       der Stand still weiter und deckte später Fehlmonate ab, statt dass der
-       Ausgleich griff: dasselbe Geld galt einmal als verbraucht und einmal als
-       Sparrate. Ein negativer Stand bleibt stehen, den holt sich der Ausgleich
-       zurück, sobald wieder etwas da ist. */
+    /* Was am Monatsende auf dem laufenden Konto liegt, gilt als ausgegeben — so
+       steht es in der Annahme oben, und so wird es hier gebucht. Vorher wuchs der
+       Stand still weiter und deckte später Fehlmonate ab: dasselbe Geld galt einmal
+       als verbraucht und einmal als Sparrate. Ein Minus bleibt stehen und kostet
+       im nächsten Monat Dispozinsen. */
     if (giro > 0) giro = 0;
 
     if (path)
-      path.push({
-        m,
-        cap,
-        giro,
-        flow,
-        save: toSavings,
-        // Was nach dem Ausgleich tatsächlich liegen bleibt. Der Dauerauftrag weist an,
-        // das laufende Konto holt sich zurück, was es zum Leben braucht.
-        net: toSavings - coverThisMonth,
-      });
+      path.push({ m, cap, giro, flow, save: toSavings });
   }
 
   let leftoverLong = null;
@@ -379,10 +356,9 @@ function simulate(s, ov = {}) {
     savedTotal,
     interestEarned,
     capAtBuy,
-    // Netto ans laufende Konto abgeflossen, bis zum Kauf. Positiv: das Tagesgeld hat
-    // den Dauerauftrag teilweise wieder hergegeben. Negativ: das laufende Konto hat
-    // eine Einmalzahlung vorgestreckt.
-    giroCover,
+    // Was das laufende Konto bis zum Kauf vorgestreckt hat, weil eine Einmalzahlung
+    // das Tagesgeld überstieg. Immer ≤ 0; zurück fließt nichts.
+    giroFronted,
     oneOffs,
     /* Was bis zum Kauftermin aus dem Tagesgeld ging — nur das gehört in die
        Aufstellung „wohin das Geld fließt". Bei der Reihenfolge „R34 zuerst" kommt
@@ -442,9 +418,9 @@ const statusOf = (v) =>
 /* Die Sparrate ist keine Konstante: sie fällt mit dem Kauf des Alltagsautos und steigt
    mit der Lohnerhöhung. Eine Momentaufnahme für den laufenden Monat wäre irreführend,
    deshalb stehen hier die Stützstellen des Verlaufs. */
-function savingMarks(s, r) {
+function savingMarks(r) {
   if (!r.path || !r.path.length) return [];
-  const raise = firstRaise(s);
+  const raise = firstRaise();
   const wanted = [{ m: 0, label: "heute" }];
   if (r.dailyMonth != null && r.dailyMonth + 1 < r.path.length)
     wanted.push({
@@ -468,4 +444,15 @@ function savingMarks(s, r) {
     .map((x) => ({ ...x, ...r.path[x.m] }));
 }
 
-export { simulate, statusOf, savingMarks };
+
+/** Was im Schnitt je Monat aufs Tagesgeld geht, bis zum Kauf.
+ *
+ *  Eine Stelle für zwei Anzeigen: die Karte oben und die Summenzeile im Sparverlauf
+ *  rechneten denselben Durchschnitt getrennt aus. Vor dem Kauf ist das der ganze
+ *  Zufluss — zurück fließt aus dem Tagesgeld nichts. */
+function mittleresSparen(r) {
+  const upto = r.path ? r.path.slice(0, r.r34Month ?? 0) : [];
+  return upto.length ? upto.reduce((a, p) => a + p.save, 0) / upto.length : 0;
+}
+
+export { simulate, statusOf, savingMarks, mittleresSparen };

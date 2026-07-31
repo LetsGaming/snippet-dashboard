@@ -2,27 +2,8 @@
 
 export const APP_TITLE = 'Snippet Dashboard'
 
-/**
- * Default iframe sandbox for bundled snippets without their own override.
- *
- * `allow-downloads` is what lets a snippet hand a file to the user. Without it the
- * browser drops the download and only logs to the console — the click looks like it
- * worked and nothing happens. Bundled snippets are first-party files from this repo,
- * so the token costs nothing here. It is deliberately absent from the user-snippet
- * default below.
- */
-export const DEFAULT_SNIPPET_SANDBOX =
-  'allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads'
-
-/**
- * Tighter default for user snippets rendered via `srcdoc`: `allow-scripts` only
- * gives them an opaque origin, so snippet code can run but cannot reach the
- * app's own storage (where user snippets live). Override per snippet via meta.
- *
- * No `allow-downloads`: pasted-in code should not be able to push files at the
- * user. A snippet that needs it says so in its own `meta.json`.
- */
-export const USER_SNIPPET_SANDBOX = 'allow-scripts'
+/* The iframe sandbox policy lives in services/sandboxPolicy.ts — defaults, the
+   user-snippet allow-list and the resolution belong together. */
 
 /** Location of the generated manifest, relative to the app base URL. */
 export const MANIFEST_PATH = 'snippets/manifest.json'

@@ -20,7 +20,7 @@
 import { LEVERS } from "./spread.js";
 import { simulate } from "./simulate.js";
 import { prov } from "./state.js";
-import { BAND_WEIGHT, SIM_HORIZON_MONTHS } from "./config.js";
+import { BAND_WEIGHT, SIM_HORIZON_MONTHS, isSolid } from "./config.js";
 import { idxFromYm, ymOf } from "./calendar.js";
 
 /* Was gemeinsam schwankt, wird gemeinsam gezogen. Die Gruppe trägt `RHO` des
@@ -111,8 +111,26 @@ function drawState(base, rnd) {
       : own;
 
     if (l.choices) {
-      // Entweder-oder: mit der hinterlegten Wahrscheinlichkeit fällt es ungünstig aus
-      s[l.key] = rnd() < (l.choiceRisk ?? 0.3) ? l.choices[1] : l.choices[0];
+      /* Entweder-oder. Der Anker ist der eingetragene Wert, nicht `choices[0]`:
+         vorher wurde blind zwischen beiden Ausgängen gewürfelt, und wer
+         `hPlateWanted` bewusst auf „nein" gestellt hatte, bekam eine Verteilung,
+         in der die Mehrheit der Läufe mit H rechnete. Stand der Wert schon
+         ungünstig, wurde er in einem Teil der Läufe schöngewürfelt.
+
+         Steht die Zahl belegt da, wird nicht gewürfelt — genau daran hängt
+         `narrowingBy`, das den Nutzen einer Aufgabe über `prov = "proof"` misst und
+         für choice-Felder sonst dauerhaft 0 Monate auswies.
+
+         Gezogen wird trotzdem immer, auch wenn das Ergebnis feststeht: sonst
+         verrutscht der Zufallsstrom je Herkunft, und `narrowingBy` würde die
+         Verschiebung mitmessen statt nur die Wirkung. */
+      const ungünstig = rnd() < (l.choiceRisk ?? 0.3);
+      const anker = base[l.key];
+      s[l.key] = isSolid(prov[l.key])
+        ? anker
+        : ungünstig
+          ? l.choices[1]
+          : anker;
       continue;
     }
     const weight = BAND_WEIGHT[prov[l.key]] ?? 1;
@@ -172,9 +190,18 @@ const quantile = (sorted, q) => {
  * zwischen zwei Renderläufen um höchstens einen Monat. Der Zufall ist gesetzt,
  * damit dieselbe Eingabe dieselbe Anzeige ergibt.
  */
-function forecast(base, { draws = 400, seed = 20260728 } = {}) {
+/** Verteilung über gezogene Zustände und Ereignisse.
+ *
+ *  `bandMonths` sammelt zusätzlich den Kapitalverlauf je Monat ein: die Soll-Ist-Kurve
+ *  zeigt damit nicht nur den einen gerechneten Pfad, sondern den Bereich, in dem die
+ *  Läufe liegen. Ohne die Angabe bleibt es bei den Kennzahlen — der Pfad kostet je Lauf
+ *  eine Liste, und wer ihn nicht zeichnet, soll ihn nicht bezahlen. */
+function forecast(base, { draws = 400, seed = 20260728, bandMonths = 0 } = {}) {
   const rnd = rng(seed);
   const horizon = Math.min(SIM_HORIZON_MONTHS, 180);
+  const capByMonth = bandMonths
+    ? Array.from({ length: bandMonths + 1 }, () => [])
+    : null;
   const months = [];
   const spare = [];
   let never = 0;
@@ -185,10 +212,16 @@ function forecast(base, { draws = 400, seed = 20260728 } = {}) {
     const { events, incomeGap } = drawEvents(rnd, horizon);
     let r;
     try {
-      r = simulate(s, { events, incomeGap });
+      r = simulate(s, { events, incomeGap, path: !!capByMonth });
     } catch {
       continue; // ein gezogener Zustand darf die Anzeige nicht abschießen
     }
+    /* Vor dem Aussortieren: auch ein Lauf, der es nie schafft, gehört in den Bereich.
+       Ihn wegzulassen hieße, nur die gelungenen Läufe zu zeigen. */
+    if (capByMonth && r.path)
+      for (const p of r.path)
+        if (p.m <= bandMonths) capByMonth[p.m].push(p.cap);
+
     if (r.r34Month == null) {
       never++;
       continue;
@@ -203,9 +236,29 @@ function forecast(base, { draws = 400, seed = 20260728 } = {}) {
   months.sort((a, b) => a - b);
   spare.sort((a, b) => a - b);
   const n = months.length;
+
+  /* Je Monat drei Linien statt einer. Monate, für die zu wenige Läufe reichen, fallen
+     raus: ein Bereich aus einer Handvoll Läufe sieht schmal aus und ist es nicht. */
+  const band = capByMonth
+    ? capByMonth
+        .map((werte, m) => {
+          if (werte.length < Math.max(20, draws * 0.2)) return null;
+          werte.sort((a, b) => a - b);
+          return {
+            m,
+            p10: quantile(werte, 0.1),
+            p50: quantile(werte, 0.5),
+            p90: quantile(werte, 0.9),
+            n: werte.length,
+          };
+        })
+        .filter(Boolean)
+    : null;
+
   return {
     draws,
     n,
+    band,
     /** Anteil der Läufe, in denen es gar nicht reicht. */
     neverShare: draws ? never / draws : 0,
     /** Anteil der Läufe, in denen nach dem Kauf unter 100 €/M bleiben. */
@@ -266,4 +319,4 @@ function narrowingBy(base, keys, { draws = 90, seed = 7331 } = {}) {
   };
 }
 
-export { forecast, narrowingBy, EVENTS, RISK_GROUP, SKEWED, RHO };
+export { forecast, narrowingBy, drawState, EVENTS, RISK_GROUP, SKEWED, RHO };

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { DEFAULT_SNIPPET_SANDBOX, USER_SNIPPET_SANDBOX } from '@/config'
 import type { Snippet } from '@/types/snippet'
 import { joinBase } from '@/utils/url'
 
@@ -12,11 +11,6 @@ const props = defineProps<Props>()
 const isLoading = ref(true)
 const isInline = computed(() => props.snippet.srcdoc !== null)
 const src = computed(() => joinBase(import.meta.env.BASE_URL, props.snippet.entry))
-const sandbox = computed(
-  () =>
-    props.snippet.sandbox ??
-    (props.snippet.source === 'user' ? USER_SNIPPET_SANDBOX : DEFAULT_SNIPPET_SANDBOX),
-)
 
 // Reset the loading overlay whenever we switch to a different snippet.
 watch(
@@ -43,7 +37,7 @@ function onLoad(): void {
       v-if="isInline"
       :key="`user:${snippet.id}`"
       :srcdoc="snippet.srcdoc ?? ''"
-      :sandbox="sandbox"
+      :sandbox="snippet.sandbox"
       :title="snippet.title"
       class="snippet-frame__iframe"
       referrerpolicy="no-referrer"
@@ -53,7 +47,7 @@ function onLoad(): void {
       v-else
       :key="`bundled:${snippet.id}`"
       :src="src"
-      :sandbox="sandbox"
+      :sandbox="snippet.sandbox"
       :title="snippet.title"
       class="snippet-frame__iframe"
       referrerpolicy="no-referrer"

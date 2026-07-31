@@ -66,19 +66,18 @@ if (JSDOM) {
 
   const src = (f) => import(`${APP}/src/${f}`);
   const { buildFields } = await src("fields.js");
-  const store = await src("store.js");
+  /* Vier Module, ein Name: der Test geht den Weg vom Plan über den Textcode zurück
+     und interessiert sich nicht für die Aufteilung dahinter. */
+  const store = {
+    ...(await src("store.js")),
+    ...(await src("snapshot.js")),
+    ...(await src("plancode.js")),
+  };
   const { state, prov, runtime, ledgers } = await src("state.js");
   const { render } = await src("render.js");
-  const {
-    wireFields,
-    wireTopControls,
-    wireLedgers,
-    wireHelp,
-    wireBackup,
-    wireStatement,
-    syncTopControls,
-  } = await src("wire.js");
-  const { auditLayout } = await src("selfcheck.js");
+  const { wireAll } = await src("wire.js");
+  const { syncTopControls } = await src("topcontrols.js");
+  const { auditLayout, measureControls } = await src("selfcheck.js");
   const { ALLFIELDS } = await src("catalog.js");
   const el = (id) => window.document.getElementById(id);
   const put = (id, v) => {
@@ -88,12 +87,7 @@ if (JSDOM) {
   };
 
   buildFields();
-  wireFields();
-  wireTopControls();
-  wireLedgers();
-  wireHelp();
-  wireBackup();
-  wireStatement();
+  wireAll();
   syncTopControls();
   render();
 
@@ -109,6 +103,16 @@ if (JSDOM) {
     for (const id of ["hero", "tl", "der_r34", "der_daily", "der_body", "der_saving"])
       assert.ok(el(id).innerHTML.trim().length > 0, `${id} ist leer`);
     assert.match(el("hero").textContent, /R34 ab \d\d\/\d{4}/);
+  });
+
+  test("jede Gruppenüberschrift trägt ihre Zusammenfassung", () => {
+    /* Gezeichnet wurde über `g.sum` — eine Eigenschaft, die der Katalog nicht kennt.
+       Die Zeile neben jeder Überschrift blieb damit dauerhaft leer, obwohl der Text
+       dafür in render.js stand. */
+    const felder = [...window.document.querySelectorAll(".gsum")];
+    assert.ok(felder.length >= 5, "keine Zusammenfassungsfelder im Dokument");
+    const leer = felder.filter((f) => !f.textContent.trim()).map((f) => f.id);
+    assert.deepEqual(leer, [], "ohne Text geblieben");
   });
 
   test("keine unaufgelösten Platzhalter im Markup", () => {
@@ -248,12 +252,16 @@ if (JSDOM) {
     assert.equal(el("stepTg").hidden, false, "Schritt „Stände übernehmen“ muss offen sein");
     assert.equal(el("stepGiro").hidden, true, "Einsortieren gehört nicht zum Tagesgeld");
 
-    window.document.querySelector('#stmtTyp [data-t="giro"]').click();
+    window.document.querySelector('#stmtTyp [data-v="giro"]').click();
     assert.equal(el("stepTg").hidden, true, "vom Girokonto darf nichts übernommen werden");
     assert.equal(el("stepGiro").hidden, false);
     assert.equal(el("stmtGiroNote").hidden, false);
+    /* Die Auswahl muss auch sichtbar bleiben. setSeg vergleicht `data-v`; solange die
+       Knöpfe `data-t` trugen, verloren nach dem Klick beide die Markierung. */
+    assert.equal(window.document.querySelector("#stmtTyp .on").textContent, "Girokonto");
 
-    window.document.querySelector('#stmtTyp [data-t="tagesgeld"]').click();
+    window.document.querySelector('#stmtTyp [data-v="tagesgeld"]').click();
+    assert.equal(window.document.querySelector("#stmtTyp .on").textContent, "Tagesgeld");
 
     el("stmtApply").click();
     await settle();
@@ -372,7 +380,7 @@ if (JSDOM) {
   });
 
   test("Geldflusstabelle geht auf und meldet keine Differenz", async () => {
-    const { fundsTableHTML } = await src("render.js");
+    const { fundsTableHTML } = await src("view/derived.js");
     const html = fundsTableHTML(state, runtime.lastRun);
     assert.ok(!html.includes("geht um"), "die Aufstellung meldet einen Fehlbetrag");
     assert.ok(html.includes("Tagesgeld im Kaufmonat"));
@@ -640,5 +648,106 @@ if (JSDOM) {
     ledgers.actual.length = 0;
     render();
     await settle();
+  });
+
+  test("der Bereich der Läufe liegt als Fläche hinter der Kurve", async () => {
+    /* Direkt gezeichnet statt über render(): die Vorschau läuft entprellt, und ein
+       Test, der auf einen Timer wartet, misst den Timer und nicht die Zeichnung. */
+    const { renderTrack } = await src("view/track.js");
+    const { runtime } = await src("state.js");
+    ledgers.actual.length = 0;
+    ledgers.actual.push({ month: dateOf(0), amt: 5200, src: "Monatsende" });
+    render();
+    await settle();
+
+    runtime.lastForecast = {
+      band: [
+        { m: 0, p10: 4000, p50: 5200, p90: 6400, n: 400 },
+        { m: 6, p10: 6000, p50: 9000, p90: 12000, n: 400 },
+        { m: 12, p10: 8000, p50: 13000, p90: 18000, n: 400 },
+      ],
+    };
+    renderTrack(runtime.lastRun);
+
+    const fan = window.document.querySelector("#track .cfan");
+    assert.ok(fan, "die Fläche fehlt");
+    assert.match(fan.getAttribute("d"), / Z$/, "die Fläche muss geschlossen sein");
+    assert.ok(window.document.querySelector("#track .cmid"), "der Mittelwert fehlt");
+    assert.match(el("track").textContent, /p10–p90/, "die Legende nennt den Bereich nicht");
+
+    runtime.lastForecast = null;
+    renderTrack(runtime.lastRun);
+    assert.equal(
+      window.document.querySelectorAll("#track .cfan").length,
+      0,
+      "ohne Vorschau darf keine Fläche stehen",
+    );
+
+    ledgers.actual.length = 0;
+    render();
+    await settle();
+  });
+
+  /* ---------------- Fremdtext aus importierten Plänen ---------------- */
+
+  test("Freitext eines Belegs landet nicht als Markup im Sparverlauf", async () => {
+    /* Der Weg: Ledger-Spalte `src` → incomeSteps → firstRaise().note → savingMarks()
+       baut daraus eine Beschriftung → savingPhasesHTML rendert sie. Ledger-Zeilen
+       kommen unverändert aus Plan-Codes und JSON-Importen, sind also Fremdtext.
+       Gebündelte Snippets laufen mit `allow-same-origin`; ein Script von hier käme
+       an den localStorage des Dashboards. */
+    ledgers.income.length = 0;
+    ledgers.income.push({
+      month: dateOf(6),
+      amt: 3200,
+      src: '<img src=x onerror="globalThis.__xss = true">',
+    });
+    render();
+    await settle();
+
+    const html = el("der_saving").innerHTML;
+    assert.match(html, /&lt;img/, "der Freitext muss escaped im Dokument stehen");
+    assert.ok(!html.includes("<img"), "und darf kein Element werden");
+    assert.equal(window.document.querySelectorAll("#der_saving img").length, 0);
+    assert.equal(globalThis.__xss, undefined);
+
+    ledgers.income.length = 0;
+    render();
+    await settle();
+  });
+
+  test("fehlende Erstzulassung kollabiert die Zeitleiste nicht", async () => {
+    /* Ohne Erstzulassung ist der H-Termin NEVER (1e6). Ungeprüft übernommen zieht er
+       das Ende der Leiste auf Monat 1.000.000: jede andere Marke sitzt dann bei 0 %
+       und im Etikett steht „01/85359". */
+    const alt = state.r34Ez;
+    try {
+      state.r34Ez = "";
+      render();
+      await settle();
+      const tl = el("tl").innerHTML;
+      assert.ok(!tl.includes("85359"), "NEVER darf nicht als Datum durchschlagen");
+      assert.ok(!tl.includes("H-Kennzeichen"), "ohne Erstzulassung kein H-Termin");
+      const marken = [...tl.matchAll(/left:([\d.]+)%/g)].map((m) => Number(m[1]));
+      assert.ok(marken.length > 0, "die Leiste muss überhaupt Marken haben");
+      assert.ok(
+        marken.some((x) => x > 1),
+        `alle Marken bei 0 %: ${marken.join(", ")}`,
+      );
+    } finally {
+      state.r34Ez = alt;
+      render();
+      await settle();
+    }
+  });
+
+  test("die Selbstprüfung meldet nur, was sie gemessen hat", () => {
+    /* Der Banner las `position`, `deckkraft` und `klickbar` — Felder, die die Messung
+       nie gesetzt hat. Im Banner stand dann „undefined". */
+    const gemessen = new Set(Object.keys(measureControls()[0] ?? {}));
+    for (const feld of ["feld", "breite", "höhe", "display", "sichtbarkeit", "rahmen"])
+      assert.ok(gemessen.has(feld), `${feld} fehlt in der Messung`);
+    for (const feld of ["position", "deckkraft", "klickbar"])
+      assert.ok(!gemessen.has(feld), `${feld} wird nicht gemessen`);
   });
 }

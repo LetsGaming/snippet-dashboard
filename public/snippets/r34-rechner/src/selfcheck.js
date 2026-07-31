@@ -13,7 +13,30 @@ import { el } from "./dom.js";
 const MIN_USABLE_HEIGHT = 12;
 const MIN_USABLE_WIDTH = 40;
 
-/** Eine Zeile je Knopfleiste: was da ist, wie groß es ist, wie es gerechnet wird. */
+/**
+ * Eine Zeile je Knopfleiste: was da ist, wie groß es ist, wie es gerechnet wird.
+ *
+ * Der Vertrag steht hier, weil der Banner ihn liest. Er las einmal `position`,
+ * `deckkraft` und `klickbar` — Felder, die nie gemessen wurden, und zeigte
+ * „undefined". Mit dieser Angabe meldet die Typprüfung das, statt es anzuzeigen.
+ *
+ * @typedef {object} Messung
+ * @property {string} feld
+ * @property {string} [status]
+ * @property {number} [knöpfe]
+ * @property {number} [breite]
+ * @property {number} [höhe]
+ * @property {number} [knopfHöhe]
+ * @property {number} [knopfBreite]
+ * @property {string} [display]
+ * @property {string} [sichtbarkeit]
+ * @property {string} [rahmen]
+ * @property {string} [textfarbe]
+ * @property {string} [hintergrund]
+ * @property {boolean|string} [feldVersteckt]
+ *
+ * @returns {Messung[]}
+ */
 function measureControls() {
   return ALLFIELDS.filter((f) => f.type === "seg" || f.type === "toggle").map(
     (f) => {
@@ -45,7 +68,9 @@ function measureControls() {
   );
 }
 
-/** Alles, was im Dokument steht, aber keinen Raum bekommt. */
+/** Alles, was im Dokument steht, aber keinen Raum bekommt.
+ *  @param {Messung[]} [rows]
+ *  @returns {Messung[]} */
 function findCollapsed(rows = measureControls()) {
   return rows.filter(
     (r) =>
@@ -72,7 +97,9 @@ function diagnose() {
   return rows;
 }
 
-/** Meldet das Problem dort, wo es auffällt: auf der Seite, nicht in der Konsole. */
+/** Meldet das Problem dort, wo es auffällt: auf der Seite, nicht in der Konsole.
+ *  @param {Messung[]} broken
+ *  @param {Messung[]} rows */
 function showBanner(broken, rows) {
   const existing = el("layoutAlert");
   if (existing) existing.remove();
@@ -86,10 +113,12 @@ function showBanner(broken, rows) {
     `Beispiel <code>${sample.feld}</code>: ` +
     (sample.status
       ? sample.status
-      : `${sample.knöpfe} Knöpfe, Leiste ${sample.breite}×${sample.höhe} px, ` +
+      : /* Nur gemessene Felder: `position`, `deckkraft` und `klickbar` standen hier,
+           ohne dass measureControls sie je gesetzt hat — im Banner stand „undefined". */
+        `${sample.knöpfe} Knöpfe, Leiste ${sample.breite}×${sample.höhe} px, ` +
         `erster Knopf ${sample.knopfBreite}×${sample.knopfHöhe} px, ` +
-        `display ${sample.display}, position ${sample.position}, ` +
-        `Deckkraft ${sample.deckkraft}, Zeiger ${sample.klickbar}`) +
+        `display ${sample.display}, Sichtbarkeit ${sample.sichtbarkeit}, ` +
+        `Rahmen ${sample.rahmen}, Textfarbe ${sample.textfarbe}`) +
     `<br><span class="la-hint">Für die vollständige Messung <code>r34diagnose()</code> in der Konsole aufrufen.</span>`;
 
   const anchor = el("hero");

@@ -879,7 +879,12 @@ const GROUPS = [
   },
 ];
 
-const ALLFIELDS = [...STEER, ...GROUPS.flatMap((g) => g.fields)];
+/* Die Gruppen tragen unterschiedlich geformte Felder — ein eigener `Feld`-Typ wäre
+   die saubere Antwort und ist eine Aufgabe für sich. Bis dahin die eine Zusicherung. */
+const ALLFIELDS = [
+  ...STEER,
+  ...GROUPS.flatMap((g) => /** @type {any[]} */ (g.fields)),
+];
 const FIELD_BY_KEY = Object.fromEntries(ALLFIELDS.map((f) => [f.key, f]));
 
 /* Belege: Angebote und tatsächliche Kontostände. */

@@ -91,13 +91,20 @@ paths later and this is the piece to replace.
 
 ## Sandboxing
 
-The iframe `sandbox` is a per-snippet, overridable allow-list. The default
-(`config.ts` -> `DEFAULT_SNIPPET_SANDBOX`) is permissive enough for a first-party
-standalone page to run its scripts, forms, and popups, while staying an explicit,
-auditable set. A snippet that needs a different privilege set declares `sandbox`
-in its `meta.json`. Because snippets are first-party, the default favours "works
-out of the box"; tighten it per snippet where a snippet takes untrusted input.
-The exact tokens are in [DEVELOPMENT.md](DEVELOPMENT.md) under Configuration.
+The iframe `sandbox` is a per-snippet, overridable allow-list. Defaults, the
+allow-list for browser snippets and the resolution all live in
+`services/sandboxPolicy.ts` — one module, because split between a config file and a
+component the rule was easy to bypass and hard to see. It is resolved once, where
+snippets enter the registry (`useSnippets`), so no view can render a snippet with an
+unresolved allow-list.
+
+The bundled default is permissive enough for a first-party standalone page to run its
+scripts, forms and popups, while staying an explicit, auditable set; a bundled snippet
+that needs something else declares `sandbox` in its `meta.json` and gets it. A
+**browser snippet** is pasted-in code sharing storage with the saved plans, so its
+override is intersected with a fixed allow-list that omits `allow-same-origin`,
+`allow-downloads` and everything that hands control to a document outside the sandbox.
+The exact tokens are in [SNIPPETS.md](SNIPPETS.md#sandboxing).
 
 ## Theming
 
@@ -163,7 +170,8 @@ override even though it isn't in storage yet.
 
 The live preview and saved user snippets both render with a tighter default
 sandbox (`allow-scripts`, opaque origin) so snippet code cannot read the app's own
-storage, where user snippets are kept.
+storage, where user snippets are kept. A user snippet cannot widen that default past
+the allow-list in `services/sandboxPolicy.ts`.
 
 ## What this deliberately is not
 

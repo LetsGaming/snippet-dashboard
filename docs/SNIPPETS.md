@@ -93,17 +93,26 @@ replace, not a merge, so list every token you need:
 }
 ```
 
+For a **browser snippet** the override is filtered, not taken as given: only
+`allow-scripts`, `allow-forms`, `allow-modals`, `allow-popups` and
+`allow-pointer-lock` are granted, and any other token is dropped. Pasted-in code
+lives in the same storage as your saved plans, so it must not be able to grant
+itself `allow-same-origin` and read them. Bundled snippets are files in this
+repository and keep their override unfiltered. The list and the reasoning are in
+`src/services/sandboxPolicy.ts`.
+
 `allow-downloads` is the one that bites quietly. Without it a snippet can build a
 blob URL, set `download` on an anchor and click it, and the browser will refuse
 without raising anything the page can catch — it only logs to the console. If a
 snippet of yours offers a file and nothing arrives, check the sandbox before you
 debug the snippet.
 
-One thing to keep in mind: adding `allow-same-origin` to a `srcdoc` snippet (a
-browser snippet, or any snippet you set that way) puts it on the app's own origin,
-where it could read the storage the other browser snippets live in. Only widen the
-sandbox for snippets you wrote and trust, and tighten it for anything that handles
-input you didn't.
+One thing to keep in mind: `allow-same-origin` on a `srcdoc` snippet would put it on
+the app's own origin, where it could read the storage the other browser snippets live
+in. That is why the filter above exists, and why a browser snippet asking for it
+silently doesn't get it. For bundled snippets nothing stops you, so only widen the
+sandbox for snippets you wrote, and tighten it for anything that handles input you
+didn't.
 
 ## Dark mode and styling
 

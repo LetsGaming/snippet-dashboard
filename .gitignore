@@ -5,5 +5,8 @@ dist-ssr
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+# Vite's dependency cache, incl. its own package.json
+.vite/
+
 # Generated at build time by scripts/generate-manifest.mjs
 public/snippets/manifest.json

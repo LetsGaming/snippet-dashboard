@@ -52,7 +52,10 @@ Messtabelle in der Konsole des Snippet-Frames:
 
 ## Module
 
-Die ersten fünfzehn fassen kein DOM an.
+Die ersten fünfzehn fassen kein DOM an. Alles unter `view/` zeichnet je einen Bereich
+und wird von `render.js` gerufen; zurück meldet es sich über `refresh.js`, nie über
+einen Import auf den Taktgeber. Alles unter `wire/` bindet die Ereignisse eines
+Bereichs und ruft danach `render`. Die Richtung ist durchgehend `wire → render → view`.
 
 | Datei | Inhalt |
 |---|---|
@@ -69,12 +72,34 @@ Die ersten fünfzehn fassen kein DOM an.
 | `spread.js` | Hebel, Sensitivität, Spanne |
 | `tasks.js` | Nächste Schritte |
 | `sources.js` | Live-Quellen (MTS-K, EZB, Frankfurter) |
-| `store.js` | Speicher, Schnappschuss, Migration |
+| `store.js` | Speicher: sichern, zurückholen, Sicherungsstand |
+| `snapshot.js` | Der Plan als Dokument: bauen, übernehmen, ältere Stände nachziehen |
+| `planguard.js` | Prüfung fremder Pläne — hier tritt Fremdes ein |
+| `plancode.js` | Plan als Textcode (base64url) |
+| `plancsv.js` | Monatswerte als Tabelle |
 | `help.js` | Hilfetexte |
-| `dom.js` | DOM-Helfer |
+| `dom.js` | DOM-Helfer (`el`, `von`, `alle` — die typisierten Zugriffe) |
+| `refresh.js` | Rückruf zum Neuzeichnen, damit keine Ansicht auf den Taktgeber zeigt |
 | `fields.js` | Feldaufbau |
-| `render.js` | Rendering |
-| `wire.js` | Verdrahtung |
+| `topcontrols.js` | Stellschrauben über dem Katalog |
+| `render.js` | Taktgeber: Ableitungen, Sichtbarkeit, Renderlauf |
+| `view/hero.js` | Ergebnis, Spanne, Leiste darüber |
+| `view/track.js` | Soll-Ist gegen den simulierten Verlauf |
+| `view/timeline.js` | Zeitleiste |
+| `view/levers.js` | Ranglisten Termin und Spielraum |
+| `view/compare.js` | Karosserie- und Terminvergleich |
+| `view/derived.js` | Abgeleitete Zahlen, Geldfluss, Sparverlauf |
+| `view/ledger.js` | Beleglisten |
+| `view/sources.js` | Live-Quellen im Bild |
+| `view/tasks.js` | Nächste Schritte |
+| `wire.js` | Verbundstelle: `wireAll()` |
+| `wire/fields.js` | Felder |
+| `wire/controls.js` | Stellschrauben |
+| `wire/ledgers.js` | Beleglisten |
+| `wire/backup.js` | Sichern, Textcode, Zwischenablage |
+| `wire/statement.js` | Kontoauszug einlesen und einsortieren |
+| `wire/help.js` | Hilfetexte und Modale |
+| `wire/reset.js` | Alles zurücksetzen |
 | `selfcheck.js` | Layout-Messung |
 
 ## Zwei Konten

@@ -6,6 +6,150 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Monatswerte als Tabelle (`↓ Tabelle` neben `↓ Datei`).** Eine Zeile je Monat mit
+  Tagesgeld, laufendem Konto, Übrigem und Sparrate, daneben der erfasste Stand aus den
+  Belegen samt Anmerkung und der Bereich aus der Vorschau. Damit liegen Plan und
+  Wirklichkeit im Tabellenprogramm nebeneinander.
+
+  Semikolon, Dezimalkomma und ein BOM: so öffnet Excel in deutscher Einstellung ohne
+  Rückfrage und mit richtigen Umlauten. Felder mit Semikolon oder Anführungszeichen
+  werden gequotet — eine Anmerkung wie `Bank; "Sparen"` zerlegt die Zeile nicht.
+  Der Sicherungsstand ändert sich durch den Export nicht: die Tabelle lässt sich nicht
+  zurücklesen, sie ist kein Plan.
+- **Die Soll-Ist-Kurve zeigt den Bereich, in dem die Läufe liegen.** Die Vorschau zieht
+  400 Zustände; bisher stand davon nur die Verteilung der Kauftermine im Bild, während
+  die Kurve den einen gerechneten Pfad zeigte. Jetzt sammelt `forecast` auf Anforderung
+  auch den Kapitalverlauf je Monat, und die Kurve bekommt p10 bis p90 als Fläche
+  dahinter, mit dem Mittelwert als gestrichelter Linie. Erfasste Stände lassen sich
+  damit gegen die Streuung lesen statt gegen eine einzelne Linie.
+
+  Läufe, die den Kauf nie erreichen, zählen mit — sonst zeigte die Fläche nur die
+  gelungenen. Monate mit zu wenigen Läufen fallen raus, weil ein Bereich aus einer
+  Handvoll Läufe schmal aussieht und es nicht ist. Ohne `bandMonths` sammelt die
+  Vorschau keine Pfade: wer die Fläche nicht zeichnet, zahlt sie nicht.
+- **Typprüfung der Snippet-Quellen (`npm run typecheck:snippets`).** `checkJs` über die
+  ES-Module, dazu Verträge als JSDoc dort, wo etwas über Modulgrenzen geht: die Messung
+  der Bedienelemente, der Hebel des Korridors, die Fensterfelder. Eine Zeile wie
+  `sample.deckkraft` — ein Feld, das die Messung nie setzt — meldet die Prüfung jetzt,
+  statt „undefined" anzuzeigen. Die Prüfung ist ohne Befund und läuft in der CI mit.
+
+### Changed
+- **`render.js` in Ansichtsmodule zerlegt.** 1.840 Zeilen zeichneten Kopfbereich,
+  Zeitleiste, Soll-Ist, Vergleiche, Belege, Quellen und Aufgaben und hielten
+  nebenbei den Taktgeber. Daraus sind neun Module unter `view/` geworden, jedes
+  für einen Bereich; `render.js` behält Ableitungen, Sichtbarkeit und den
+  Renderlauf und ist auf 410 Zeilen zurück.
+- **`store.js` in vier Module getrennt.** 592 Zeilen machten drei Dinge: Speicher,
+  Prüfung fremder Pläne und Textcode. Jetzt trägt `planguard.js` die Grenze, an der
+  Fremdes eintritt, `snapshot.js` den Plan als Dokument samt Migration, `plancode.js`
+  den Transport und `store.js` nur noch Sichern und Zurückholen. Die Richtung ist eine
+  Kette ohne Rückverweis: `store → snapshot → planguard`.
+- **`wire.js` in Bereichsmodule zerlegt.** 917 Zeilen Verdrahtung stehen jetzt in
+  sieben Modulen unter `wire/`, eines je Bereich; das größte ist der Kontoauszug mit
+  397 Zeilen. `wire.js` selbst ist die Verbundstelle: `wireAll()` sagt, in welcher
+  Reihenfolge beim Start verdrahtet wird. Der Start rief die sieben Funktionen vorher
+  einzeln auf, der Oberflächentest ebenso — eine vergessene Zeile fiel dort nicht auf.
+  `watchHero` ist zum Kopfbereich gewandert, den es beobachtet.
+- **Der Ladezyklus zwischen `render.js` und `wire.js` ist weg.** `syncTopControls`
+  steht jetzt in `topcontrols.js`, und die Ansichten melden über `refresh.js`, dass
+  neu zu zeichnen ist, statt `render` zu importieren. Der Zyklus lief bisher nur
+  deshalb, weil ESM Funktionen vorzieht. Ein Test prüft, dass kein Modul unter
+  `view/` auf den Taktgeber zurückzeigt.
+
+### Fixed
+- **Die Zusammenfassung neben jeder Gruppenüberschrift blieb leer.** Gezeichnet
+  wurde über `g.sum` — eine Eigenschaft, die der Feldkatalog nicht hat. Der Text
+  dafür stand die ganze Zeit unter `GROUP_SUMMARIES` in `render.js` und wurde nie
+  gerufen. Beim Zerlegen fiel es auf, weil der Linter die Konstante als ungenutzt
+  meldete.
+
+### Security
+- **Fremdtext aus einem importierten Plan konnte Script ausführen.** Der Freitext der
+  Ledger-Spalte „Quelle" lief über die Beschriftung im Sparverlauf ungefiltert ins
+  Markup. Pläne kommen als Datei und als Textcode von außen, und gebündelte Snippets
+  laufen mit `allow-same-origin` — ein eingeschleustes Script hätte den Speicher des
+  Dashboards gelesen, mit allen Plänen und allen eigenen Snippets. Escaping an der
+  Render-Stelle ist die zweite Verteidigung; die erste ist neu: **jeder Plan wird beim
+  Einlesen geprüft**, an genau einer Stelle. Nur bekannte Schlüssel, nur zum Feld
+  passende Grundtypen, nur bekannte Spalten je Beleg-Liste, Freitext auf 200 Zeichen
+  begrenzt, höchstens 500 Zeilen je Liste. Damit fällt auch weg, dass ein Plan
+  Schlüssel setzen konnte, die es nicht gibt (`__proto__` ist nach `JSON.parse` ein
+  gewöhnlicher Schlüssel, `obj[k] = v` damit aber ein Schreibzugriff auf den Prototyp),
+  und dass eingelesene Belegzeilen als Referenz auf das fremde Array hingen.
+- **Ein eingefügtes Snippet konnte sich die eigene Isolation aufheben.** Über
+  `meta.sandbox` ließ sich `allow-same-origin` anfordern — genau das, was die engere
+  Vorgabe für Benutzer-Snippets verhindern soll. Ein Wunsch wird jetzt gegen eine
+  feste Liste geschnitten (`allow-scripts`, `allow-forms`, `allow-modals`,
+  `allow-popups`, `allow-pointer-lock`); alles andere fällt weg. Gebündelte Snippets
+  sind Dateien aus dem Repository und behalten ihre Angabe. Vorgaben, Liste und
+  Auflösung stehen zusammen in `services/sandboxPolicy.ts` und werden einmal beim
+  Aufbau der Übersicht aufgelöst, nicht in der Ansicht.
+
+### Fixed
+- **Die Vorschau ignorierte getroffene Entscheidungen.** Entweder-oder-Felder wurden
+  rein aus der hinterlegten Risikowahrscheinlichkeit gewürfelt, ohne den eingetragenen
+  Wert und ohne die Herkunft. Wer „H-Kennzeichen: nicht beantragen" gesetzt hatte,
+  bekam eine Verteilung, in der die Mehrheit der Läufe mit H rechnete; stand ein Wert
+  bereits ungünstig, wurde er in einem Teil der Läufe schöngewürfelt. Jetzt ist der
+  eingetragene Wert der Anker, gewürfelt wird nur der ungünstige Ausgang, und eine
+  belegte Zahl wird gar nicht mehr angetastet. Damit greift auch die Nutzenangabe an
+  den Aufgaben wieder: sie misst über „belegt" und wies für diese Felder dauerhaft
+  0 Monate aus.
+- **Ein leeres Kursfeld rechnete Yen als Euro.** Das Feld klemmt auf 1, und der
+  Rückfall fiel genau darauf: aus 2.800.000 ¥ wurden 2,8 Mio €, und die landeten als
+  Kaufpreis im Plan. Dieselbe Wurzel traf die Preisbelege, weil der Handwert für jede
+  Umrechnung auf 1 gesetzt wurde. Es gilt jetzt überall dieselbe Kette — eingetragener
+  Kurs, Live-Kurs, letzter brauchbarer Handwert — und die Import-Zusammenfassung sagt,
+  wenn sie greift.
+- **Ohne Erstzulassung kollabierte die Zeitleiste.** Der H-Termin ist dann „tritt nie
+  ein", ungeprüft übernommen zog er das Ende der Leiste auf Monat 1.000.000: alle
+  Marken saßen bei 0 %, im Etikett stand das Jahr 85359.
+- **Die Frage „welches Konto ist das?" verlor nach dem Klick ihre Markierung.** Die
+  Knöpfe trugen ein anderes Attribut, als die Umschaltung vergleicht.
+- **„Alles zurücksetzen" ließ die Verschiebung des künftigen Gehalts stehen.** Die
+  Startwerte der Bedienelemente standen an zwei Stellen, und in der zweiten fehlte
+  dieses eine Feld. Jetzt gibt es sie einmal; ein neues Bedienelement kann nicht mehr
+  vergessen werden.
+- **Im Layout-Banner stand „undefined".** Es las drei Felder, die die Messung nie
+  gesetzt hat.
+- **Stornobuchungen fielen aus MT940-Auszügen still heraus.** Die Marke steht als
+  `RC`/`RD` mit dem R vor dem C/D; gelesen wurde nur ein Schlüssel dahinter. Ein
+  Auszug mit Rückbuchung wies dadurch zu hohe Ausgaben aus. Ein Storno kehrt jetzt das
+  Vorzeichen der Buchung um, die es aufhebt.
+- **Erstattungen erhöhten die Lebenshaltung.** In einer Ausgabenkategorie zählte nur
+  der Abfluss, nicht das Geld zurück — eine Retoure schlug damit als Ausgabe durch und
+  wurde fünf Jahre fortgeschrieben.
+- **Unmögliche Datumsangaben liefen als eigener Monat durch die Auswertung.** Aus
+  „31.13.26" wurde der Monat „2026-13".
+
+### Changed
+- **Die Buchhaltung des entfernten Ausgleichs ist weg.** Seit das Tagesgeld eine
+  Einbahnstraße ist, gab es keinen Rückfluss mehr — die Zahlen dafür standen aber noch:
+  eine leere `settle`-Funktion, ein Feld, das immer 0 war, eine zweite Zahl im Verlauf,
+  die immer der ersten glich, drei UI-Zweige, die nie erscheinen konnten, und
+  Kommentare, die einen Mechanismus beschrieben, den es nicht mehr gibt. Zwei Tests
+  prüften Bedingungen, die nicht eintreten können, und unterschieden damit nichts.
+  `giroCover` heißt jetzt `giroFronted` und ist als „vom laufenden Konto vorgestreckt"
+  geführt, immer ≤ 0.
+- Der Durchschnitt „aufs Tagesgeld" wird an einer Stelle gerechnet, nicht zweimal.
+
+### Added
+- **ESLint im Repo und im CI.** Flat-Config für die drei Welten (Vue/TS,
+  Snippet-Module, Node), Formatierungsregeln aus. Der erste Lauf fand den fehlenden
+  Guard in der Zeitleiste an seinem Abdruck: ein Import, der nirgends benutzt wurde.
+- Tests für die Sandbox-Politik der Rahmen, ausführbar ohne Vite und ohne Browser.
+
+### Removed
+- Der eingecheckte Vite-Temp-Ordner. `.vite/` steht jetzt in `.gitignore` — gemeint war
+  er, ignoriert wurde vorher `package.json`.
+
+### Dependencies
+- vite 5 → 8, `@vitejs/plugin-vue` 5 → 6, vue-tsc 2 → 3, TypeScript 5.6 → 5.9. Damit
+  sind die sechs offenen Advisories erledigt; sie betrafen alle den Dev-Server, den das
+  File-API-Plugin erweitert. Node im CI auf 22, wie im Dockerfile.
+
+
 ### Fixed
 - **R34-Rechner: „Lebenshaltung übernehmen" warf die ganze Auswertung weg.** Der Schritt
   wurde durch eine Bestätigungszeile ersetzt — die eingelesenen Buchungen lagen noch im

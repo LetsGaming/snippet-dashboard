@@ -2,7 +2,7 @@ import { idxFromYm } from "./calendar.js";
 import { kfzTaxYear } from "./tax.js";
 import { BODIES, LIEBHABER_Y, LIEBHABER_FALLBACK_Y, sfAt } from "./config.js";
 import { clamp, median, growth, fuelMonth } from "./format.js";
-import { toEur, setManualJpy } from "./currency.js";
+import { toEur, setManualJpy, jpyPerEur, JPY_MIN } from "./currency.js";
 import {
   state,
   prov,
@@ -117,7 +117,11 @@ function premiumFromLedger(which, level) {
 
 function importCost(s = state) {
   setManualJpy(s.jpyRate);
-  const rate = s.jpyRate > 0 ? s.jpyRate : 1;
+  /* Vorher fiel ein fehlender Kurs auf 1 zurück und rechnete Yen als Euro: das Feld
+     klemmt auf `min: 1`, `syncDerivedFields` schreibt `importCost().total` in den
+     Kaufpreis, und der stand dann bei 2,8 Mio €. Jetzt greift dieselbe Kette wie in
+     `toEur`. */
+  const rate = jpyPerEur(s.jpyRate);
   const carEur = (s.impJpy || 0) / rate;
   const cif = carEur + (s.impFreight || 0);
   const dutyPct = s.impCollector ? 0 : s.impDuty || 0;
@@ -131,6 +135,10 @@ function importCost(s = state) {
     dutyPct,
     vat,
     vatPct,
+    /* Mit welchem Kurs gerechnet wurde und ob er aus dem Feld kam. Die Anzeige muss
+       sagen können, dass hier ein Rückfallkurs steht. */
+    rate,
+    rateFromField: Number(s.jpyRate) >= JPY_MIN,
     total: cif + duty + vat + (s.impReg || 0),
   };
 }

@@ -24,4 +24,12 @@ const ledgers = {
 };
 const doneTasks = {}; // Aufgaben-Kennung → ISO-Datum der Erledigung
 
-export { ledgers, doneTasks };
+/* Spalten der beiden Listen ohne Bedienoberfläche. Die fünf sichtbaren beschreibt der
+   Katalog über `LEDGERS[…].cols`; diese hier hätten sonst keine Beschreibung, an der
+   sich der Import entlang prüfen kann. */
+const INTERNAL_LEDGER_COLS = {
+  rules: ["pat", "cat"],
+  imports: ["account", "from", "to", "at"],
+};
+
+export { ledgers, doneTasks, INTERNAL_LEDGER_COLS };

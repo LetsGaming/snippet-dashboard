@@ -26,6 +26,24 @@ const SLIDER_LEVERS = [
   { key: "appr", label: "Wertsteigerung", band: 2, unit: "%/J", min: 0 },
 ];
 
+/**
+ * Ein Regler des Korridors. Felder mit `band` schwanken stetig, Felder mit `choices`
+ * kennen nur zwei Ausgänge — beide Formen liegen in derselben Liste, und die Vorschau
+ * unterscheidet sie an genau diesen Feldern.
+ *
+ * @typedef {object} Lever
+ * @property {string} key
+ * @property {string} label
+ * @property {number} [band]
+ * @property {any[]} [choices]
+ * @property {number} [choiceRisk]
+ * @property {string} [choiceLabel]
+ * @property {string} unit
+ * @property {number} min
+ * @property {boolean} [isMonth]
+ */
+
+/** @type {Lever[]} */
 const LEVERS = [
   ...ALLFIELDS.filter((f) => f.band || f.choices).map((f) => ({
     key: f.key,

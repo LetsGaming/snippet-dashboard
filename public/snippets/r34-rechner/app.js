@@ -11,25 +11,12 @@ import { restore } from "./src/store.js";
 
 import { buildFields } from "./src/fields.js";
 import { setSeg, setInput } from "./src/dom.js";
-import {
-  render,
-  renderNote,
-  renderVisit,
-  rememberVisit,
-  loadSources,
-} from "./src/render.js";
+import { render, renderNote, renderVisit, rememberVisit } from "./src/render.js";
+import { loadSources } from "./src/view/sources.js";
 import { runtime } from "./src/state.js";
-import {
-  wireFields,
-  wireLedgers,
-  wireTopControls,
-  wireBackup,
-  wireStatement,
-  wireHelp,
-  wireReset,
-  syncTopControls,
-  watchHero,
-} from "./src/wire.js";
+import { wireAll } from "./src/wire.js";
+import { watchHero } from "./src/view/hero.js";
+import { syncTopControls } from "./src/topcontrols.js";
 import { auditLayout } from "./src/selfcheck.js";
 
 async function boot() {
@@ -44,13 +31,7 @@ async function boot() {
     else setInput("f_" + f.key, state[f.key]);
   });
 
-  wireFields();
-  wireTopControls();
-  wireLedgers();
-  wireBackup();
-  wireStatement();
-  wireHelp();
-  wireReset();
+  wireAll();
   syncTopControls();
   renderNote();
   render();

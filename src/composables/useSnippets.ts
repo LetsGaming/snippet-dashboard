@@ -1,11 +1,20 @@
 import { ref } from 'vue'
 import { DEFAULT_SNIPPET_ORDER } from '@/config'
+import { resolveSandbox } from '@/services/sandboxPolicy'
 import { fetchManifest } from '@/services/snippetService'
 import { listUserSnippets } from '@/services/snippetStore'
 import type { ManifestSnippet, Snippet, SnippetMeta } from '@/types/snippet'
 
+/* Die Sandbox wird hier aufgelöst, nicht in der Ansicht: so kann keine Ansicht ein
+   Snippet mit einer unaufgelösten Freigabeliste rendern. */
 function fromBundled(entry: ManifestSnippet): Snippet {
-  return { ...entry, source: 'bundled', srcdoc: null, isOverride: false }
+  return {
+    ...entry,
+    sandbox: resolveSandbox('bundled', entry.sandbox),
+    source: 'bundled',
+    srcdoc: null,
+    isOverride: false,
+  }
 }
 
 function fromUser(id: string, html: string, meta: SnippetMeta, isOverride: boolean): Snippet {
@@ -15,7 +24,7 @@ function fromUser(id: string, html: string, meta: SnippetMeta, isOverride: boole
     description: meta.description ?? '',
     tags: meta.tags ?? [],
     entry: '',
-    sandbox: meta.sandbox ?? null,
+    sandbox: resolveSandbox('user', meta.sandbox ?? null),
     order: typeof meta.order === 'number' ? meta.order : DEFAULT_SNIPPET_ORDER,
     source: 'user',
     srcdoc: html,

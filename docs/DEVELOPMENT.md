@@ -55,8 +55,6 @@ re-derived.
 | Constant                  | Value / type                                    | Purpose                                                      |
 | ------------------------- | ----------------------------------------------- | ------------------------------------------------------------ |
 | `APP_TITLE`               | `'Snippet Dashboard'`                           | Shown in the shell                                           |
-| `DEFAULT_SNIPPET_SANDBOX` | `allow-scripts allow-same-origin allow-forms allow-popups allow-modals` | Sandbox for bundled snippets without an override |
-| `USER_SNIPPET_SANDBOX`    | `allow-scripts`                                 | Sandbox for browser (`srcdoc`) snippets: opaque origin       |
 | `MANIFEST_PATH`           | `snippets/manifest.json`                        | Where the app fetches the manifest, relative to the base URL |
 | `DEFAULT_SNIPPET_ORDER`   | `100`                                           | Sort weight for snippets without an explicit `order`         |
 | `EDITOR_ENABLED`          | `true`                                          | Whether the editor UI is shown                               |
@@ -64,9 +62,13 @@ re-derived.
 | `NEW_SNIPPET_HTML`        | HTML string                                     | Starting document for a new snippet                          |
 
 `EDITOR_BACKEND` keys off `import.meta.env.DEV`, so it switches automatically
-between the two backends. `DEFAULT_SNIPPET_SANDBOX` shares its name with the
-per-snippet `sandbox` in `meta.json`, which replaces it for one snippet (see
-[SNIPPETS.md](SNIPPETS.md#sandboxing)).
+between the two backends.
+
+The iframe sandbox is not here. Defaults (`DEFAULT_SNIPPET_SANDBOX`,
+`USER_SNIPPET_SANDBOX`), the allow-list for browser snippets and the resolution live
+together in `src/services/sandboxPolicy.ts`, because a security rule split across a
+config file and a component is easy to bypass and hard to see. See
+[SNIPPETS.md](SNIPPETS.md#sandboxing).
 
 Two knobs live outside `config.ts`:
 

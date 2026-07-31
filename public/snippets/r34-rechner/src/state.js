@@ -3,24 +3,19 @@ import { H_PLATE_YEARS, AGE_CLASSIC_INSURANCE, monthsAfterYm } from "./tax.js";
 import { SEASON_MIN, SEASON_MAX, NEVER } from "./config.js";
 import { clamp } from "./format.js";
 import { ALLFIELDS } from "./catalog.js";
-import { ledgers, doneTasks } from "./ledgers.js";
+import { ledgers, doneTasks, INTERNAL_LEDGER_COLS } from "./ledgers.js";
 
 /* ============================================================
    5 — Zustand
    ============================================================ */
-const UI_KEYS = [
-  "cap",
-  "appr",
-  "incomeShift",
-  "strat",
-  "method",
-  "restGoal",
-  "restAmount",
-  "restRate",
-  "restTerm",
-];
-
-const state = {
+/** Die Startwerte der Bedienelemente über dem Feldkatalog.
+ *
+ *  Eine Fabrik, weil `restYm` vom laufenden Monat abhängt und beim Zurücksetzen neu
+ *  fallen muss. Vor allem aber stehen die Werte damit an genau einer Stelle: „Alles
+ *  zurücksetzen" hat die Liste vorher ein zweites Mal aufgezählt und dabei
+ *  `incomeShift` vergessen — der Regler blieb stehen, während alles andere auf
+ *  Anfang ging. Ein neues Bedienelement kann jetzt nicht mehr vergessen werden. */
+const uiDefaults = () => ({
   cap: 0,
   appr: 4,
   /* Prozentuale Verschiebung aller bekannten künftigen Gehaltsschritte. Trägt die
@@ -34,10 +29,18 @@ const state = {
   restAmount: 10000,
   restRate: 350,
   restTerm: 3,
-};
+});
+
+/* Gesichert wird jeder dieser Werte außer `restYm`: der folgt aus dem laufenden Monat
+   und wandert nur in den Schnappschuss, wenn er von Hand gesetzt wurde. */
+const UI_KEYS = Object.keys(uiDefaults()).filter((k) => k !== "restYm");
+
+const state = {};
 const prov = {};
 
+/** Der einzige Weg auf Anfang — Katalogwerte und Bedienelemente in einem Schritt. */
 function initState() {
+  Object.assign(state, uiDefaults());
   ALLFIELDS.forEach((f) => {
     state[f.key] = f.def;
     prov[f.key] = f.prov || "guess";
@@ -67,7 +70,9 @@ const age25Known = (s) => monthsAfterYm(s.birth, AGE_CLASSIC_INSURANCE) != null;
  *  dritte bringt, oder in vier Monaten den Arbeitgeber wechselt, konnte das nicht
  *  eintragen. Schritte in der Vergangenheit sind kein Fehler: sie beschreiben, was
  *  bereits gilt, und werden deshalb auf den laufenden Monat gezogen. */
-const incomeSteps = (s) =>
+/* Ohne Parameter: die Schritte stehen in den Belegen, nicht im Zustand. Die Signatur
+   `incomeSteps(s)` hat das Gegenteil behauptet und ihr Argument verworfen. */
+const incomeSteps = () =>
   (ledgers.income || [])
     .map((r) => ({
       m: Math.max(0, idxFromYm(r.month) ?? NaN),
@@ -81,12 +86,12 @@ const incomeSteps = (s) =>
  *  greift die allgemeine Lohnentwicklung; zwischen bekannten Schritten wären es
  *  die Zahlen aus dem Vertrag, die schon eine Erhöhung enthalten. */
 const incomeAnchor = (s) => {
-  const steps = incomeSteps(s);
+  const steps = incomeSteps();
   return steps.length ? steps[steps.length - 1] : { m: 0, amt: s.netNow };
 };
 
 /** Erster Schritt, falls vorhanden — für Beschriftungen in Verlauf und Zeitleiste. */
-const firstRaise = (s) => incomeSteps(s)[0] ?? null;
+const firstRaise = () => incomeSteps()[0] ?? null;
 
 function seasonMonths(s) {
   if (!s.r34Season) return 12;
@@ -130,11 +135,13 @@ const runtime = { lastRun: null, lastSpread: null, lastForecast: null,
 };
 
 export {
+  uiDefaults,
   UI_KEYS,
   state,
   prov,
   ledgers,
   doneTasks,
+  INTERNAL_LEDGER_COLS,
   runtime,
   initState,
   licenceMonth,

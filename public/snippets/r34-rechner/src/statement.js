@@ -145,8 +145,14 @@ function camtEntries(statements) {
 const MT_BAL = /^:(6[02])([FM]):([CD])(\d{6})([A-Z]{3})([\d.,]+)/;
 
 /** `:61:` trägt Datum und Betrag, `:86:` den Text dazu — in Unterfeldern `?NN`.
- *  `?32`/`?33` ist der Name der Gegenpartei, `?20` bis `?29` der Verwendungszweck. */
-const MT_TX = /^:61:(\d{6})(\d{4})?([CD])R?([\d.,]+)/;
+ *  `?32`/`?33` ist der Name der Gegenpartei, `?20` bis `?29` der Verwendungszweck.
+ *
+ *  Die Marke steht laut Feldaufbau als `2a`: `C`, `D` oder mit vorangestelltem `R`
+ *  als Storno (`RC`, `RD`). Danach kann ein einbuchstabiger Währungsschlüssel folgen.
+ *  Vorher stand hier `([CD])R?` — das fing den Schlüssel hinter der Marke, aber kein
+ *  Storno, weil das R davor steht. Stornobuchungen fielen damit still heraus, und ein
+ *  Auszug mit Rückbuchung wies zu hohe Ausgaben aus. */
+const MT_TX = /^:61:(\d{6})(\d{4})?(R?[CD])([A-Z])?([\d.,]+)/;
 
 function mt940Text(block) {
   const teile = block.split("?").slice(1);
@@ -182,13 +188,17 @@ function parseMt940(text) {
     const tx = MT_TX.exec(line.trim());
     if (tx) {
       schliesse();
-      const [, jjmmtt, , cd, betrag] = tx;
+      const [, jjmmtt, , marke, , betrag] = tx;
       const amt = Number(betrag.replace(/\./g, "").replace(",", "."));
+      /* `RC` storniert eine Gutschrift und wirkt damit wie eine Belastung, `RD`
+         umgekehrt. Ohne diese Zeile hätte ein Storno das Vorzeichen der Buchung, die
+         es aufhebt. */
+      const soll = marke === "D" || marke === "RC";
       const jj = Number(jjmmtt.slice(0, 2));
       const jahr = jj >= 70 ? 1900 + jj : 2000 + jj;
       const date = `${jahr}-${jjmmtt.slice(2, 4)}-${jjmmtt.slice(4, 6)}`;
       if (Number.isFinite(amt) && monthOf(date))
-        offen = { month: monthOf(date), date, amt: (cd === "D" ? -1 : 1) * amt };
+        offen = { month: monthOf(date), date, amt: (soll ? -1 : 1) * amt };
       continue;
     }
     if (/^:86:/.test(line.trim())) {
@@ -285,6 +295,14 @@ function parseGermanDate(raw) {
   const m = /^(\d{2})\.(\d{2})\.(\d{2}(?:\d{2})?)$/.exec(String(raw).trim());
   if (!m) return null;
   const jahr = m[3].length === 2 ? (Number(m[3]) >= 70 ? "19" : "20") + m[3] : m[3];
+  /* Bereichsprüfung, sonst wurde aus „31.13.26" der Monat „2026-13" und lief als
+     eigener Monat durch die ganze Auswertung. Der Kalendertag zählt mit: den 31.02.
+     gibt es nicht, und eine Datei, die ihn enthält, ist kein Auszug. */
+  const tag = Number(m[1]);
+  const monat = Number(m[2]);
+  if (monat < 1 || monat > 12 || tag < 1 || tag > 31) return null;
+  const probe = new Date(Date.UTC(Number(jahr), monat - 1, tag));
+  if (probe.getUTCMonth() !== monat - 1 || probe.getUTCDate() !== tag) return null;
   return `${jahr}-${m[2]}-${m[1]}`;
 }
 

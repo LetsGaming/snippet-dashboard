@@ -25,6 +25,8 @@ export type SnippetOrigin = 'bundled' | 'user'
  * snippets, the inline HTML rendered via `srcdoc` (bundled ones load `entry`).
  */
 export interface Snippet extends ManifestSnippet {
+  /** The resolved allow-list (see services/sandboxPolicy.ts) — never null. */
+  readonly sandbox: string
   readonly source: SnippetOrigin
   /** Inline HTML for user snippets; `null` for bundled (rendered via `entry`). */
   readonly srcdoc: string | null

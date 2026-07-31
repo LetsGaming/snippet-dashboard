@@ -16,13 +16,15 @@ const { seasonMonths, seasonValid, hMonthKnown } = await import(
   `${SRC}/state.js`
 );
 const { simulate } = await import(`${SRC}/simulate.js`);
+const { drawState } = await import(`${SRC}/forecast.js`);
+const { initState, uiDefaults } = await import(`${SRC}/state.js`);
 const { sensitivity, spreadWindow, LEVERS } = await import(`${SRC}/spread.js`);
 const { kfzTaxYear, co2Component } = await import(`${SRC}/tax.js`);
 const { annuity, fuelMonth, median, growth } = await import(`${SRC}/format.js`);
 const { importCost, priceFromLedger, apprFromLedger } = await import(
   `${SRC}/pricing.js`
 );
-const { toEur, RATE_CACHE } = await import(`${SRC}/currency.js`);
+const { toEur, RATE_CACHE, JPY_MIN } = await import(`${SRC}/currency.js`);
 const { ledgers, doneTasks } = await import(`${SRC}/ledgers.js`);
 const { idxFromYm, dat, ymOf } = await import(`${SRC}/calendar.js`);
 
@@ -69,7 +71,7 @@ test("Aufstellung bis zum Kaufmonat geht exakt auf", () => {
       r.interestEarned -
       r.preBuy.licence -
       r.preBuy.daily -
-      r.giroCover;
+      r.giroFronted;
     assert.ok(
       Math.abs(sum - r.capAtBuy) < 0.01,
       `${name}: Aufstellung weicht um ${(sum - r.capAtBuy).toFixed(2)} € ab`,
@@ -123,7 +125,14 @@ test("das Tagesgeld ist eine Einbahnstraße", () => {
      sich das Modell die Differenz still zurück und machte einen zu hohen Dauerauftrag
      folgenlos. */
   const r = simulate(withState({ saveMode: "fixed", saveFixed: 1200 }), { path: true });
-  for (const p of r.path) assert.equal(p.net, p.save, `m=${p.m}`);
+  /* Vor dem Kauf geht der Dauerauftrag voll durch, und was übrig bleibt, bleibt nicht
+     auf dem laufenden Konto liegen. Vorher stand hier `p.net === p.save` — beide Zahlen
+     kamen aus derselben Größe, die Zusicherung war leer. */
+  for (const p of r.path.filter((x) => r.r34Month == null || x.m < r.r34Month)) {
+    assert.ok(p.save >= state.saveFixed - 0.01, `m=${p.m}: nur ${p.save} angewiesen`);
+    assert.ok(p.giro <= 0.01, `m=${p.m}: ${p.giro} bleibt liegen`);
+  }
+  assert.ok(r.giroFronted <= 0, "aus dem Tagesgeld fließt nichts zurück");
   assert.ok(r.overdraftMonths > 0, "der Engpass muss als Minus sichtbar werden");
   assert.ok(r.overdraftCost > 0, "und Dispozinsen kosten");
 });
@@ -319,9 +328,38 @@ test("Einfuhr: Sammlungsstück gegen regulär", () => {
   assert.ok(reg.total > coll.total, "regulär muss teurer sein");
 });
 
-test("unbrauchbarer Yen-Kurs sprengt die Einfuhrrechnung nicht", () => {
-  const c = importCost(withState({ importOn: true, jpyRate: 0 }));
-  assert.ok(Number.isFinite(c.total));
+test("unbrauchbarer Yen-Kurs rechnet Yen nicht als Euro", () => {
+  /* Das Kursfeld klemmt auf `min: 1`. Vorher fiel der Rückfall genau darauf zurück:
+     2.800.000 ¥ wurden 2,8 Mio €, und `syncDerivedFields` schrieb das in den
+     Kaufpreis. Der alte Test prüfte nur, dass eine Zahl herauskommt. */
+  for (const kaputt of [0, 1, NaN, undefined, ""]) {
+    const c = importCost(withState({ importOn: true, impJpy: 2800000, jpyRate: kaputt }));
+    assert.ok(Number.isFinite(c.total), `Kurs ${kaputt}: ${c.total}`);
+    assert.ok(c.rate >= JPY_MIN, `Kurs ${kaputt}: gerechnet mit ${c.rate}`);
+    assert.equal(c.rateFromField, false);
+    assert.ok(
+      c.carEur < 50000,
+      `Kurs ${kaputt}: 2,8 Mio ¥ ergeben ${Math.round(c.carEur)} €`,
+    );
+  }
+  // Ein eingetragener Kurs schlägt jeden Rückfall
+  const eigen = importCost(withState({ importOn: true, impJpy: 2800000, jpyRate: 175 }));
+  assert.equal(eigen.rateFromField, true);
+  assert.ok(Math.abs(eigen.carEur - 2800000 / 175) < 1e-9);
+});
+
+test("ein leeres Kursfeld verdirbt auch die Belege nicht", () => {
+  /* Dieselbe Wurzel, zweite Fundstelle: `setManualJpy` nahm jeden Wert über 0 an und
+     setzte damit den Handwert für *jede* Umrechnung auf 1 — ein Angebot über
+     2.800.000 ¥ stand danach als 2,8 Mio € im Preisbeleg. */
+  importCost(withState({ importOn: true, jpyRate: 1 }));
+  const alt = RATE_CACHE.JPY;
+  RATE_CACHE.JPY = null;
+  try {
+    assert.ok(toEur(2800000, "JPY") < 50000, `Beleg ergibt ${toEur(2800000, "JPY")} €`);
+  } finally {
+    RATE_CACHE.JPY = alt;
+  }
 });
 
 /* ---------------- Abgeleitete Termine ---------------- */
@@ -430,13 +468,13 @@ test("jeder Lauf liefert endliche Kennzahlen", () => {
       "savedTotal",
       "interestEarned",
       "capAtBuy",
-      "giroCover",
+      "giroFronted",
       "minGiro",
     ])
       assert.ok(Number.isFinite(r[k]), `${name}: ${k} ist ${r[k]}`);
     for (const p of r.path)
       assert.ok(
-        Number.isFinite(p.cap) && Number.isFinite(p.net),
+        Number.isFinite(p.cap) && Number.isFinite(p.save),
         `${name}: Verlauf enthält ${p.cap}`,
       );
   }
@@ -444,8 +482,67 @@ test("jeder Lauf liefert endliche Kennzahlen", () => {
 
 /* ---------------- Speicher ---------------- */
 
+test("ein präparierter Plan kommt nicht durch das Einlesen", async () => {
+  const { applySnapshot } = await import(`${SRC}/snapshot.js`);
+  withState();
+  for (const k of Object.keys(ledgers)) ledgers[k] = [];
+  const vorherLiving = state.living;
+  const langerText = "A".repeat(500);
+
+  /* Über JSON.parse, nicht als Literal: nur so ist `__proto__` ein gewöhnlicher
+     Schlüssel — und genau darüber lief die Prototype Pollution. */
+  const boese = JSON.parse(`{
+    "v": 8,
+    "values": {
+      "__proto__": { "geimpft": true },
+      "living": "1200",
+      "gibtEsNicht": 5,
+      "car": 30000
+    },
+    "origin": { "car": "erfunden" },
+    "fallback": { "fuelE5": [1.95, "erfunden"] },
+    "ledgers": {
+      "income": [{ "month": "2027-01", "amt": 2600, "src": "${langerText}", "extra": { "a": 1 } }],
+      "gibtEsNicht": [{ "x": 1 }]
+    },
+    "doneTasks": { "__proto__": "2026-01-01", "insR34": "2026-06-01" },
+    "keys": [["fx", "schluessel"], "kaputt"]
+  }`);
+
+  assert.equal(applySnapshot(boese), true);
+
+  assert.equal(Object.getPrototypeOf(state), Object.prototype, "Prototyp beschrieben");
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(doneTasks, "__proto__"),
+    "__proto__ als Aufgabe angelegt",
+  );
+  assert.equal(state.living, vorherLiving, "ein String darf kein Zahlenfeld setzen");
+  assert.equal(state.gibtEsNicht, undefined, "unbekannter Schlüssel wurde angelegt");
+  assert.equal(state.car, 30000, "gültige Werte müssen weiter durchkommen");
+  assert.equal(prov.car, "manual", "erfundene Herkunft muss zurückfallen");
+  assert.notEqual(prov.fuelE5, "erfunden");
+  assert.ok(!("gibtEsNicht" in ledgers), "unbekannte Liste wurde angelegt");
+  assert.equal(ledgers.income.length, 1);
+  assert.equal(ledgers.income[0].extra, undefined, "fremde Spalte kam mit");
+  assert.equal(ledgers.income[0].src.length, 200, "Freitext ist nicht begrenzt");
+  assert.equal(doneTasks.insR34, "2026-06-01", "gültige Erledigung muss durchkommen");
+
+  withState();
+  for (const k of Object.keys(ledgers)) ledgers[k] = [];
+  for (const k of Object.keys(doneTasks)) delete doneTasks[k];
+});
+
+test("geprüfte Belegzeilen sind Kopien, keine Referenzen", async () => {
+  const { applySnapshot } = await import(`${SRC}/snapshot.js`);
+  const fremd = [{ month: "2027-01", amt: 2600, src: "Erhöhung" }];
+  applySnapshot({ v: 8, values: {}, ledgers: { income: fremd } });
+  fremd[0].amt = 99999;
+  assert.equal(ledgers.income[0].amt, 2600, "die Liste hängt am fremden Array");
+  for (const k of Object.keys(ledgers)) ledgers[k] = [];
+});
+
 test("alte Pläne werden beim Einlesen an die Feldgrenzen gerückt", async () => {
-  const { applySnapshot } = await import(`${SRC}/store.js`);
+  const { applySnapshot } = await import(`${SRC}/snapshot.js`);
   withState();
   applySnapshot({
     v: 5,
@@ -463,14 +560,22 @@ test("alte Pläne werden beim Einlesen an die Feldgrenzen gerückt", async () =>
 });
 
 test("kaputte Schnappschüsse werden abgelehnt statt teilweise übernommen", async () => {
-  const { applySnapshot } = await import(`${SRC}/store.js`);
+  const { applySnapshot } = await import(`${SRC}/snapshot.js`);
   for (const bad of [null, undefined, 42, "text"])
     assert.equal(applySnapshot(bad), false);
 });
 
 /* ---------------- Sichern und übertragen ---------------- */
 
-const store_ = await import(`${SRC}/store.js`);
+/* Die Planmaschinerie liegt in vier Modulen: Speicher, Dokument, Prüfung fremder
+   Pläne, Textcode. Die Tests hier prüfen den Weg durch alle vier, nicht die
+   Aufteilung — deshalb stehen sie unter einem Namen zusammen. */
+const store_ = {
+  ...(await import(`${SRC}/store.js`)),
+  ...(await import(`${SRC}/snapshot.js`)),
+  ...(await import(`${SRC}/planguard.js`)),
+  ...(await import(`${SRC}/plancode.js`)),
+};
 
 /** Ein Plan, wie er nach zwei Jahren Sammeln aussieht. */
 function fatPlan() {
@@ -953,6 +1058,27 @@ test("das laufende Konto trägt nichts über den Monat hinaus", () => {
 
 const { forecast, EVENTS } = await import(`${SRC}/forecast.js`);
 
+test("die Vorschau liefert den Kapitalbereich je Monat", () => {
+  const f = forecast(withState(), { draws: 200, bandMonths: 24 });
+  assert.ok(f.band?.length > 1, "kein Bereich gesammelt");
+  let vorher = -1;
+  for (const b of f.band) {
+    assert.ok(b.m > vorher, "die Monate müssen aufsteigen");
+    vorher = b.m;
+    assert.ok(
+      b.p10 <= b.p50 && b.p50 <= b.p90,
+      `m=${b.m}: ${b.p10} / ${b.p50} / ${b.p90} liegen nicht in der Reihenfolge`,
+    );
+    assert.ok(b.n >= 40, `m=${b.m}: nur ${b.n} Läufe — zu dünn für einen Bereich`);
+  }
+});
+
+test("ohne Anforderung wird kein Pfad eingesammelt", () => {
+  // Ein Pfad je Lauf kostet; wer den Bereich nicht zeichnet, soll ihn nicht bezahlen.
+  assert.equal(forecast(withState(), { draws: 50 }).band, null);
+});
+
+
 test("Vorschau liefert eine geordnete Verteilung", () => {
   const f = forecast(withState(), { draws: 200 });
   assert.ok(f.n > 150, `nur ${f.n} von 200 Läufen brauchbar`);
@@ -1160,15 +1286,169 @@ test("die Fahrschule geht nicht zusätzlich vom Tagesgeld ab", () => {
   assert.ok(Math.abs(r.oneOffs.licence - state.licence) < 0.01, "die Summe stimmt weiter");
   // Aufstellung muss trotzdem exakt aufgehen
   const sum =
-    state.cap + r.savedTotal + r.interestEarned - r.preBuy.licence - r.preBuy.daily - r.giroCover;
+    state.cap + r.savedTotal + r.interestEarned - r.preBuy.licence - r.preBuy.daily - r.giroFronted;
   assert.ok(Math.abs(sum - r.capAtBuy) < 0.01);
 });
 
 test("reicht der Monat nicht, springt weiterhin das Tagesgeld ein", () => {
   // Hohe Rate, knappes Netto: der Ausgleich muss greifen
   const r = simulate(withState({ cap: 20000, licence: 9000, licenceMonths: 3 }), { path: true });
-  assert.ok(r.negMonths > 0 || r.giroCover > 0, "der Engpass muss sichtbar werden");
+  /* Vorher stand hier `giroCover > 0` — unmöglich, seit das Tagesgeld eine
+     Einbahnstraße ist. Der Test unterschied damit nichts. */
+  assert.ok(
+    r.negMonths > 0 || r.giroFronted < 0,
+    "der Engpass muss sichtbar werden: Fehlmonate oder vorgestrecktes Geld",
+  );
   assert.ok(Math.abs(r.oneOffs.licence - 9000) < 0.01);
+});
+
+
+/* ---------------- Vorschau: Entweder-oder-Felder ---------------- */
+
+/* Herkunft ist ein Modul-Singleton wie der Zustand. Wer sie umsetzt, setzt sie zurück,
+   sonst misst der nächste Test einen anderen Korridor. */
+const mitProv = (patch, fn) => {
+  const alt = Object.fromEntries(Object.keys(patch).map((k) => [k, prov[k]]));
+  Object.assign(prov, patch);
+  try {
+    return fn();
+  } finally {
+    Object.assign(prov, alt);
+  }
+};
+
+test("Vorschau würfelt eine getroffene Entscheidung nicht um", () => {
+  /* `hPlateWanted` steht auf „beantragen" und ist belegt. Vorher zog die Vorschau
+     rein aus `choiceRisk` und rechnete damit in einem Teil der Läufe ohne H —
+     unabhängig davon, was eingetragen war. */
+  const s = withState({ hPlateWanted: true });
+  const gezogen = mitProv({ hPlateWanted: "manual" }, () => drawState(s, () => 0.01));
+  assert.equal(gezogen.hPlateWanted, true);
+});
+
+test("Vorschau schönt einen ungünstig stehenden Wert nicht", () => {
+  // Reißt die Risikoschwelle nicht, bleibt der eingetragene Wert stehen — vorher
+  // sprang das Feld auf choices[0] und damit auf den günstigeren Ausgang.
+  const s = withState({ r34Norm: "ohne Einstufung" });
+  const gezogen = mitProv({ r34Norm: "guess" }, () => drawState(s, () => 0.99));
+  assert.equal(gezogen.r34Norm, "ohne Einstufung");
+});
+
+test("offene Entweder-oder-Felder fallen weiter ungünstig aus", () => {
+  const s = withState({ r34Norm: "Euro 2" });
+  const gezogen = mitProv({ r34Norm: "guess" }, () => drawState(s, () => 0.01));
+  assert.equal(gezogen.r34Norm, "ohne Einstufung", "der Korridor braucht den Ausschlag");
+});
+
+test("eine Aufgabe auf ein Entweder-oder-Feld zeigt einen Gewinn", () => {
+  /* Der Nutzen wird über `prov = "proof"` gemessen. Solange choice-Felder die Herkunft
+     ignorierten, wies jede solche Aufgabe dauerhaft 0 aus.
+
+     Voller Neustart: ein Versicherungsangebot aus einem früheren Test schlägt den
+     Tarifwechsel und macht die Messung wieder blind. */
+  initState();
+  for (const k of Object.keys(ledgers)) ledgers[k] = [];
+  const gewinn = narrowingBy(withState(), ["r34Switch25"]);
+  assert.ok(gewinn, "die Messung muss ein Ergebnis liefern");
+  assert.ok(
+    gewinn.months > 0 || gewinn.spare > 0,
+    `Termin und Spielraum bleiben beide unberührt (${JSON.stringify(gewinn)})`,
+  );
+});
+
+/* ---------------- Zurücksetzen ---------------- */
+
+test("initState setzt auch die Bedienelemente über dem Katalog zurück", () => {
+  /* „Alles zurücksetzen" zählte die Startwerte ein zweites Mal auf und ließ dabei
+     `incomeShift` stehen. Jetzt trägt initState() sie, und zwar alle. */
+  withState({ incomeShift: -35, cap: 9000, method: "rest", restTerm: 5 });
+  initState();
+  for (const [k, v] of Object.entries(uiDefaults()))
+    assert.equal(state[k], v, `${k} steht auf ${state[k]} statt ${v}`);
+});
+
+/* ---------------- Monatswerte als Tabelle ---------------- */
+
+const { planCsv, SPALTEN } = await import(`${SRC}/plancsv.js`);
+const { ymOf: ymOfCsv } = await import(`${SRC}/calendar.js`);
+
+test("Monatswerte kommen als Tabelle mit Kopfzeile heraus", () => {
+  const r = simulate(withState(), { path: true });
+  const zeilen = planCsv(r).replace(/^\ufeff/, "").trim().split("\r\n");
+  assert.equal(zeilen[0], SPALTEN.join(";"));
+  assert.equal(zeilen.length, r.path.length + 1, "eine Zeile je Monat plus Kopf");
+  assert.equal(zeilen[1].split(";").length, SPALTEN.length, "Spaltenzahl weicht ab");
+  assert.match(zeilen[1], /^\d{4}-\d{2};0;/, "Monat und Index stehen vorn");
+  // Deutsche Tabellenprogramme lesen den Punkt als Tausendertrennzeichen
+  assert.ok(!/\d\.\d/.test(zeilen[1]), `Dezimalpunkt in: ${zeilen[1]}`);
+});
+
+test("erfasster Stand und Bereich stehen neben dem Plan", () => {
+  ledgers.actual.length = 0;
+  const r = simulate(withState(), { path: true });
+  ledgers.actual.push({ month: ymOfCsv(0), amt: 5200, src: "Monatsende" });
+  const csv = planCsv(r, { band: [{ m: 0, p10: 100, p50: 200, p90: 300 }] });
+  const felder = csv.split("\r\n")[1].split(";");
+  assert.equal(felder[6], "5200,00", "der erfasste Stand fehlt");
+  assert.deepEqual(felder.slice(7, 10), ["100,00", "200,00", "300,00"]);
+  assert.equal(felder[10], "Monatsende");
+  ledgers.actual.length = 0;
+});
+
+test("ein Semikolon in der Anmerkung zerlegt die Zeile nicht", () => {
+  ledgers.actual.length = 0;
+  const r = simulate(withState(), { path: true });
+  ledgers.actual.push({ month: ymOfCsv(0), amt: 100, src: 'Bank; "Sparen"' });
+  const zeile = planCsv(r).split("\r\n")[1];
+  assert.equal(zeile.split(";").length > SPALTEN.length, true, "unquotiert wäre es länger");
+  assert.match(zeile, /"Bank; ""Sparen"""$/, "das Feld muss gequotet und verdoppelt sein");
+  ledgers.actual.length = 0;
+});
+
+/* ---------------- Aufbau der Ansichtsmodule ---------------- */
+
+test("kein Ansichtsmodul zeigt auf den Taktgeber zurück", async () => {
+  /* render.js zeichnet den Lauf und ruft die Ansichten. Importiert eine Ansicht
+     `render` zurück, ist der Ladezyklus wieder da, den der Umbau aufgelöst hat —
+     die Blätter melden über refresh.js, dass etwas zu tun ist. */
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const dir = new URL("../public/snippets/r34-rechner/src/view/", import.meta.url);
+  const dateien = readdirSync(dir).filter((f) => f.endsWith(".js"));
+  assert.ok(dateien.length >= 5, "die Ansichten sind verschwunden");
+  for (const f of dateien) {
+    const text = readFileSync(new URL(f, dir), "utf8");
+    for (const [, ziel] of text.matchAll(/^import[^;]*from "([^"]+)";/gm))
+      assert.ok(
+        !/\/(render|wire)\.js$/.test(ziel),
+        `view/${f} importiert ${ziel}`,
+      );
+  }
+});
+
+test("jeder Importpfad im Snippet zeigt auf eine vorhandene Datei", async () => {
+  /* Kein Bundler, kein Typecheck: ein vertippter Pfad fällt sonst erst im Browser
+     auf, und dann als weiße Seite. */
+  const { readdirSync, readFileSync, existsSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const wurzel = fileURLToPath(new URL("../public/snippets/r34-rechner/", import.meta.url));
+  const dateien = [];
+  const sammle = (ordner) => {
+    for (const e of readdirSync(ordner, { withFileTypes: true })) {
+      const p = `${ordner}${e.name}`;
+      if (e.isDirectory()) sammle(`${p}/`);
+      else if (e.name.endsWith(".js")) dateien.push(p);
+    }
+  };
+  sammle(wurzel);
+  assert.ok(dateien.length > 20, "so wenige Module? Pfad stimmt nicht");
+  for (const datei of dateien) {
+    const text = readFileSync(datei, "utf8");
+    const ordner = datei.slice(0, datei.lastIndexOf("/") + 1);
+    for (const [, ziel] of text.matchAll(/^import[^;]*from "(\.[^"]+)";/gm)) {
+      const abs = new URL(ziel, `file://${ordner}`).pathname;
+      assert.ok(existsSync(abs), `${datei.replace(wurzel, "")} importiert ${ziel}`);
+    }
+  }
 });
 
 /* ---------------- Fuzz: Invarianten über zufällige Zustände ---------------- */
@@ -1205,12 +1485,12 @@ test("Invarianten halten über 1500 zufällige Zustände", () => {
     const abgebrochen = r.overdrawn;
 
     for (const k of ["financed", "deposited", "payment", "interest", "savedTotal",
-      "interestEarned", "capAtBuy", "giroCover", "minGiro", "priceAtBuy"])
+      "interestEarned", "capAtBuy", "giroFronted", "minGiro", "priceAtBuy"])
       if (!Number.isFinite(r[k])) bruch(`${k} ist ${r[k]}`);
     if (Math.min(...r.path.map((p) => p.cap)) < -0.01) bruch("Tagesgeld negativ");
     if (r.r34Month != null) {
       const summe = s.cap + r.savedTotal + r.interestEarned - r.preBuy.licence
-        - r.preBuy.daily - r.giroCover;
+        - r.preBuy.daily - r.giroFronted;
       if (Math.abs(summe - r.capAtBuy) > 0.02)
         bruch(`Aufstellung um ${(summe - r.capAtBuy).toFixed(2)} € daneben`);
     }
@@ -1240,9 +1520,8 @@ test("der tiefste Stand und die Zahl der Minusmonate passen zum Verlauf", () => 
 
 /* ---------------- Kontoauszüge lesen ---------------- */
 
-const { readStatement, mergeBalances, detectFormat } = await import(
-  `${SRC}/statement.js`
-);
+const { readStatement, mergeBalances, detectFormat, parseGermanDate } =
+  await import(`${SRC}/statement.js`);
 const { readFileSync } = await import("node:fs");
 const fixture = (name) =>
   readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -1289,6 +1568,16 @@ test("MT940: :62F: ist der Schlusssaldo, :62M: nur ein Zwischenstand", () => {
   assert.ok(!r.balances.some((b) => b.amt === 3500));
   // :60F: ist der Anfangssaldo und gehört nicht dazu
   assert.ok(!r.balances.some((b) => b.amt === 2400));
+});
+
+test("unmögliche Datumsangaben laufen nicht als eigener Monat durch", () => {
+  /* Ohne Bereichsprüfung wurde aus „31.13.26" der Monat „2026-13" und tauchte in der
+     Auswertung als eigener Monat auf. */
+  for (const kaputt of ["31.13.26", "00.06.26", "32.01.26", "31.02.26", "29.02.26"])
+    assert.equal(parseGermanDate(kaputt), null, `${kaputt} kam durch`);
+  assert.equal(parseGermanDate("01.06.2026"), "2026-06-01");
+  assert.equal(parseGermanDate("29.02.24"), "2024-02-29", "der Schalttag ist gültig");
+  assert.equal(parseGermanDate("31.12.99"), "1999-12-31", "zweistellig ab 70 ist 19xx");
 });
 
 test("beide Formate ergeben dieselbe Reihe", () => {
@@ -1375,9 +1664,49 @@ test("zweimal dieselbe Datei ändert nichts mehr", () => {
 
 /* ---------------- Buchungen einsortieren ---------------- */
 
+test("MT940: Stornobuchungen fallen nicht heraus und kehren das Vorzeichen um", () => {
+  /* Die Marke steht als `RC`/`RD` — das R **vor** dem C/D. Der frühere Ausdruck
+     `([CD])R?` fing nur den Währungsschlüssel dahinter, Stornos fielen still heraus
+     und der Auszug wies zu hohe Ausgaben aus.
+
+     Der Auszug ist nach dem Feldaufbau gebaut, nicht von einer Bank exportiert — an
+     einem echten Storno-Auszug gehört das noch einmal geprüft. */
+  const r = readStatement(fixture("mt940-storno.sta"));
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(r.entries.length, 4, "eine Stornobuchung fehlt");
+  assert.deepEqual(
+    r.entries.map((e) => e.amt),
+    [-120, 120, 80, -80],
+    "RC storniert eine Gutschrift und wirkt wie eine Belastung, RD umgekehrt",
+  );
+});
+
 const { summarise, derive, categorise, merchantOf, SEED_RULES } = await import(
   `${SRC}/spending.js`
 );
+
+test("eine Erstattung mindert die Kategorie, in die sie gehört", () => {
+  /* Vorher fiel jede Gutschrift unter `Math.max(0, -amt)` heraus: der Kauf zählte,
+     das Geld zurück nicht — eine Retoure erhöhte damit die Lebenshaltung. */
+  const s = summarise([
+    { month: "2026-01", amt: -500, name: "Rewe", text: "Einkauf" },
+    { month: "2026-01", amt: 120, name: "Rewe", text: "Erstattung Retoure" },
+    { month: "2026-01", amt: -60, name: "Werkstatt", text: "Oelwechsel" },
+  ]);
+  assert.equal(s.months[0].leben, 380, "500 raus, 120 zurück");
+  assert.equal(s.months[0].auto, 60, "andere Kategorien bleiben unberührt");
+});
+
+test("ein Storno hebt in der Auswertung die Buchung auf, die es aufhebt", () => {
+  /* Setzt voraus, dass die Rückbuchung den Zweck der Buchung wiederholt — so schreiben
+     Banken sie, und nur dann trifft dieselbe Regel. Trägt ein Storno einen eigenen
+     Text, landet es als offener Posten und wird einmal von Hand einsortiert. */
+  const s = summarise(readStatement(fixture("mt940-storno.sta")).entries);
+  const juli = s.months.find((m) => m.month === "2026-07");
+  assert.ok(juli, "der Monat fehlt in der Auswertung");
+  assert.ok(Math.abs(juli.auto) < 0.01, `Auto steht auf ${juli.auto}`);
+  assert.ok(Math.abs(juli.leben) < 0.01, `Leben steht auf ${juli.leben}`);
+});
 
 test("Umbuchungen aufs eigene Tagesgeld zählen nicht als Ausgabe", () => {
   const r = readStatement(fixture("camt-umsaetze.xml"));

@@ -1596,6 +1596,19 @@ table.cmp td.neg {
   stroke-width: 2.5;
   stroke-linejoin: round;
 }
+/* Der Bereich der gezogenen Läufe liegt hinter den Linien und nimmt ihnen nichts:
+   gefüllt, ohne Kontur, damit die beiden Kurven darüber lesbar bleiben. */
+.chart .cfan {
+  fill: var(--acc-soft);
+  stroke: none;
+  opacity: 0.8;
+}
+.chart .cmid {
+  fill: none;
+  stroke: var(--acc-bar);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
 .chart .cgrid {
   stroke: var(--line);
   stroke-width: 1;
@@ -1634,6 +1647,7 @@ table.cmp td.neg {
   margin-bottom: var(--gap-3);
 }
 .clegend .lp::before,
+.clegend .lb::before,
 .clegend .lr::before {
   content: "";
   display: inline-block;
@@ -1647,6 +1661,10 @@ table.cmp td.neg {
 }
 .clegend .lr::before {
   background: var(--acc);
+}
+.clegend .lb::before {
+  background: var(--acc-soft);
+  border: 1px solid var(--acc-bar);
 }
 .clegend .lx {
   margin-left: auto;
