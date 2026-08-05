@@ -28,7 +28,10 @@ const doneTasks = {}; // Aufgaben-Kennung → ISO-Datum der Erledigung
    Katalog über `LEDGERS[…].cols`; diese hier hätten sonst keine Beschreibung, an der
    sich der Import entlang prüfen kann. */
 const INTERNAL_LEDGER_COLS = {
-  rules: ["pat", "cat"],
+  /* `sub` verfeinert `cat` (bislang nur „lebensmittel" unter „leben"). Ohne die Spalte
+     überlebt eine gelernte Lebensmittelregel den Export nicht und käme als gewöhnliche
+     Lebenshaltung zurück, und die Zahl wäre still um den Wocheneinkauf zu niedrig. */
+  rules: ["pat", "cat", "sub"],
   imports: ["account", "from", "to", "at"],
 };
 

@@ -2322,8 +2322,12 @@ table.cmp.phases tr.sumline td {
   color: var(--ink3);
   font-variant-numeric: tabular-nums;
 }
+/* Sechs Knöpfe passen auf einem Telefon nicht in eine Zeile. `flex-shrink: 0` hält sie
+   in voller Breite, deshalb muss die Leiste umbrechen dürfen. Sonst steht sie über
+   den Rand hinaus und der letzte Knopf ist nicht erreichbar. */
 .so-acts {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   flex-shrink: 0;
 }

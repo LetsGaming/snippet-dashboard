@@ -18,6 +18,7 @@
    Gespeichert werden am Ende nur die Monatssummen und die gelernten Regeln. Nie eine
    einzelne Buchung.
    ============================================================ */
+import { median } from "./format.js";
 
 /* Fünf Töpfe, weil sie im Modell fünf verschiedene Dinge bedeuten:
 
@@ -39,6 +40,17 @@ const KATEGORIEN = {
   umbuchung: "Umbuchung",
   ignorieren: "ignorieren",
 };
+
+/* Lebensmittel sind eine **Verfeinerung** von `leben`, kein sechster Topf: der Einkauf
+   zählt in der Lebenshaltung mit und wird zusätzlich für sich ausgewiesen. Ein eigener
+   Topf würde ihn aus der Lebenshaltung herausrechnen und den Plan um den halben
+   Wocheneinkauf zu optimistisch machen.
+
+   Warum überhaupt getrennt: Miete, Versicherung und Abos stehen fest, der Einkauf ist
+   der einzige große Posten, den man kurzfristig bewegen kann, und zugleich der, den man
+   beim Schätzen am weitesten verfehlt. Wer 300 € im Monat vermutet und 480 € ausgibt,
+   verschiebt den Kauftermin um Monate, ohne es zu merken. */
+const LEBENSMITTEL = "lebensmittel";
 
 /* Startregeln für den deutschen Markt. Bewusst auf Ketten und Behörden beschränkt:
    was eindeutig ist, wird zugeordnet, alles Zweideutige bleibt offen.
@@ -91,20 +103,43 @@ const SEED_RULES = [
   { pat: "telekom", cat: "leben" },
   { pat: "vodafone", cat: "leben" },
   { pat: "congstar", cat: "leben" },
-  { pat: "edeka", cat: "leben" },
-  { pat: "rewe", cat: "leben" },
-  { pat: "aldi", cat: "leben" },
-  { pat: "lidl", cat: "leben" },
-  { pat: "kaufland", cat: "leben" },
-  { pat: "penny", cat: "leben" },
+
+  /* Lebensmittel: nur Handel, keine Gastronomie. McDonald's, Lieferdienste und die
+     Bäckerei am Bahnhof sind Essen unterwegs: eine andere Gewohnheit, ein anderer
+     Hebel, und zusammengezählt sagt die Zahl über keine von beiden etwas.
+
+     Drogerien (dm, Rossmann) bleiben ebenfalls draußen: der Lebensmittelanteil dort
+     ist klein, der Rest ist Haushalt. Sie stehen weiter unten als allgemeines `leben`. */
+  { pat: "edeka", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "rewe", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "aldi", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "lidl", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "kaufland", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "penny", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "netto marken", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "famila", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "wucherpfennig", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "nahkauf", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "marktkauf", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "tegut", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "hit markt", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "biomarkt", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "alnatura", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "picnic", cat: "leben", sub: LEBENSMITTEL },
+  /* Getränkemarkt, Metzger und Bäckerei als Gattung: die Namen wechseln von Ort zu Ort,
+     das Wort im Buchungstext bleibt. `norm` gleicht „Getränke" und „GETRAENKE" an. */
+  { pat: "getränke", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "trinkgut", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "metzgerei", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "fleischerei", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "bäckerei", cat: "leben", sub: LEBENSMITTEL },
+  { pat: "backstube", cat: "leben", sub: LEBENSMITTEL },
+
   { pat: "rossmann", cat: "leben" },
   { pat: "dm-drogerie", cat: "leben" },
   { pat: "netflix", cat: "leben" },
   { pat: "spotify", cat: "leben" },
   { pat: "krankenkasse", cat: "leben" },
-  { pat: "famila", cat: "leben" },
-  { pat: "wucherpfennig", cat: "leben" },
-  { pat: "netto marken", cat: "leben" },
   { pat: "mcdonald", cat: "leben" },
   { pat: "burger king", cat: "leben" },
   { pat: "drillisch", cat: "leben" },
@@ -130,6 +165,9 @@ const SEED_RULES = [
    „paypal"  — sagt über den Zweck gar nichts
    „star"    — Tankstellenkette und Wortbestandteil von hundert anderen Namen
    „real"    — Supermarkt und häufiges Wortfragment
+   „norma"   — Discounter, steckt aber in „normal", „Normalpreis", „Normaltarif"
+   „globus"  — SB-Warenhaus und Baumarkt unter demselben Namen: Wocheneinkauf oder
+               Anschaffung, und die beiden gehören in verschiedene Töpfe
 
    Bei diesen ist eine falsche Zuordnung wahrscheinlicher als eine richtige, und sie
    fällt niemandem auf, weil sie in einer Summe verschwindet. */
@@ -207,15 +245,21 @@ function categorise(entry, rules = []) {
   const heu = norm(`${entry.name} ${entry.text} ${entry.kind || ""} ${merchantOf(entry)}`);
   const rein = entry.amt > 0;
   for (const r of [...rules, ...SEED_RULES]) {
+    /* Gelernte Regeln kommen auch aus eingelesenen Plänen und tragen dort jeden Text.
+       Eine unbekannte Kategorie wird übersprungen statt durchgereicht: `cat: "month"`
+       landete sonst als Schlüssel im Monatssatz und überschriebe ihn. Übersprungen
+       heißt, die Buchung bleibt offen. Sichtbar ist besser als falsch einsortiert. */
+    if (!Object.hasOwn(KATEGORIEN, r.cat)) continue;
     /* Manche Namen bedeuten je nach Richtung etwas anderes: „Stadtkasse" ist als
        Gutschrift eine Leistung und als Lastschrift die Grundsteuer. Regeln dürfen
        deshalb eine Richtung verlangen. */
     if (r.dir === "in" && !rein) continue;
     if (r.dir === "out" && rein) continue;
     const p = norm(r.pat);
-    if (p && heu.includes(p)) return { cat: r.cat, pat: r.pat };
+    if (p && heu.includes(p))
+      return { cat: r.cat, sub: r.sub === LEBENSMITTEL ? LEBENSMITTEL : null, pat: r.pat };
   }
-  return { cat: "offen", pat: null };
+  return { cat: "offen", sub: null, pat: null };
 }
 
 /** Gegenparteien zusammenfassen, damit die Rückfrage nicht 24-mal dieselbe Firma zeigt. */
@@ -242,12 +286,15 @@ function summarise(entries, rules = []) {
   const monate = new Map();
   const offen = new Map();
   for (const e of entries) {
-    const { cat } = categorise(e, rules);
+    const { cat, sub } = categorise(e, rules);
     const m =
       monate.get(e.month) ||
       {
         month: e.month,
         leben: 0,
+        /* Teilmenge von `leben`, keine zusätzliche Summe. Wer die Spalten addiert,
+           zählt den Wocheneinkauf zweimal. */
+        lebensmittel: 0,
         auto: 0,
         einmalig: 0,
         einkommen: 0,
@@ -275,6 +322,10 @@ function summarise(entries, rules = []) {
          eine Retoure erhöhte die Lebenshaltung, weil der Kauf zählte und das Geld
          zurück nicht. */
       m[cat] -= e.amt;
+      /* Dieselbe Rechnung noch einmal auf die Teilmenge, damit eine Rückerstattung vom
+         Supermarkt auch dort abgeht. `cat` wird mitgeprüft, nicht nur `sub`: die
+         Invariante „Lebensmittel ⊆ Leben" darf keine kaputte Regel aufbrechen. */
+      if (cat === "leben" && sub === LEBENSMITTEL) m.lebensmittel -= e.amt;
     }
     monate.set(e.month, m);
   }
@@ -285,13 +336,6 @@ function summarise(entries, rules = []) {
     open: [...offen.values()].sort((a, b) => b.summe - a.summe),
   };
 }
-
-const median = (xs) => {
-  if (!xs.length) return null;
-  const a = [...xs].sort((p, q) => p - q);
-  const m = a.length >> 1;
-  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
-};
 
 /**
  * Was aus den Monatswerten für den Plan folgt.
@@ -315,6 +359,9 @@ function derive(summary, { minMonths = 2 } = {}) {
       partial: summary.months.filter((m) => m.n >= 5 && !m.einkommen).map((m) => m.month),
     };
   const lebenswerte = voll.map((m) => m.leben);
+  const lebenMedian = median(lebenswerte);
+  const einkaufswerte = voll.map((m) => m.lebensmittel);
+  const einkaufMedian = median(einkaufswerte);
   const offenAnteil =
     voll.reduce((a, m) => a + m.offen, 0) /
     Math.max(1, voll.reduce((a, m) => a + m.leben + m.auto + m.offen, 0));
@@ -331,7 +378,23 @@ function derive(summary, { minMonths = 2 } = {}) {
     ok: true,
     months: voll.length,
     partial: summary.months.filter((m) => m.n >= 5 && !m.einkommen).map((m) => m.month),
-    living: median(lebenswerte),
+    living: lebenMedian,
+    /* Der Teil der Lebenshaltung, der auf Einkäufe entfällt. Beide Mittelwerte, weil
+       sie verschiedene Fragen beantworten: der Median sagt, wie ein normaler Monat
+       aussieht, der Schnitt, was der Zeitraum tatsächlich gekostet hat. Bei Einkäufen
+       liegen sie meist nah beieinander. Tun sie es nicht, steckt ein Großeinkauf oder
+       ein Urlaubsmonat drin, und dann ist genau das die Information. */
+    groceries: {
+      median: einkaufMedian,
+      mean: einkaufswerte.reduce((a, b) => a + b, 0) / voll.length,
+      /* Anteil an der Lebenshaltung, gegen denselben Median gerechnet, den der Plan
+         übernimmt. Zwei Bezugsgrößen ergäben eine Prozentzahl, die zu keiner der
+         angezeigten Summen passt. */
+      share: lebenMedian > 0 ? einkaufMedian / lebenMedian : 0,
+      /* Monate ohne einen einzigen erkannten Einkauf. Niemand isst umsonst: steht hier
+         etwas, fehlt ein Laden in den Regeln und die Zahl ist zu niedrig. */
+      blank: voll.filter((m) => m.lebensmittel < 0.005).length,
+    },
     capacity: {
       median: median(uebrig),
       /* Der schwächste Monat entscheidet, was ein Dauerauftrag verträgt. Ein Betrag
@@ -353,6 +416,7 @@ function derive(summary, { minMonths = 2 } = {}) {
 
 export {
   KATEGORIEN,
+  LEBENSMITTEL,
   merchantOf,
   SEED_RULES,
   categorise,

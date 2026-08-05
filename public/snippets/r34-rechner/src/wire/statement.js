@@ -9,7 +9,7 @@ import { fmtYm } from "../calendar.js";
 import { el, setInput, setSeg, alle, von } from "../dom.js";
 import { esc, eur, plural } from "../format.js";
 import { render } from "../render.js";
-import { derive, summarise } from "../spending.js";
+import { LEBENSMITTEL, derive, summarise } from "../spending.js";
 import { ledgers, prov, state } from "../state.js";
 import { combine, mergeBalances, readStatement } from "../statement.js";
 import { persist } from "../store.js";
@@ -42,13 +42,14 @@ function zeigeUmsaetze() {
   const monate = s.months
     .map(
       (m) =>
-        `<tr><td>${fmtYm(m.month)}</td><td>${eur(m.leben)} €</td><td>${eur(m.auto)} €</td>` +
+        `<tr><td>${fmtYm(m.month)}</td><td>${eur(m.leben)} €</td><td>${eur(m.lebensmittel)} €</td>` +
+        `<td>${eur(m.auto)} €</td>` +
         `<td>${eur(m.einkommen)} €</td><td class="${m.offen > 0 ? "neg" : ""}">${eur(m.offen)} €</td></tr>`,
     )
     .join("");
 
-  const knopf = (k, g, t) =>
-    `<button type="button" class="act sm" data-cat="${k}" data-grp="${esc(g)}">${t}</button>`;
+  const knopf = (k, g, t, sub) =>
+    `<button type="button" class="act sm" data-cat="${k}"${sub ? ` data-sub="${sub}"` : ""} data-grp="${esc(g)}">${t}</button>`;
   /* Dreiundzwanzig Zeilen mit je vier Knöpfen sind keine Frage, sondern eine Wand.
      Gezeigt werden die sechs, die etwas ausmachen; der Rest steht als eine Zahl da und
      lässt sich aufklappen, wenn jemand ihn wirklich sortieren will. */
@@ -56,7 +57,10 @@ function zeigeUmsaetze() {
   const zeile = (g) =>
     `<div class="stmt-open"><span class="so-name">${esc(g.name)}</span>` +
     `<span class="so-meta">${plural(g.n, "Buchung", "Buchungen")} · ${eur(g.summe)} €</span>` +
-    `<span class="so-acts">${knopf("leben", g.key, "Leben")}${knopf("auto", g.key, "Auto")}` +
+    `<span class="so-acts">${knopf("leben", g.key, "Leben")}` +
+    /* Direkt neben „Leben", weil es dasselbe meint und nur genauer ist: was hier landet,
+       zählt weiterhin in der Lebenshaltung. */
+    `${knopf("leben", g.key, "Lebensmittel", LEBENSMITTEL)}${knopf("auto", g.key, "Auto")}` +
     `${knopf("einmalig", g.key, "einmalig")}${knopf("umbuchung", g.key, "Umbuchung")}` +
     `${knopf("ignorieren", g.key, "egal")}</span></div>`;
   const rest = s.open.slice(SICHTBAR);
@@ -69,13 +73,15 @@ function zeigeUmsaetze() {
   box.innerHTML =
     bestaetigung +
     `<div class="stmt-found"><b>${plural(offeneBuchungen.length, "Buchung", "Buchungen")}</b> gelesen` +
-    `<table><thead><tr><th>Monat</th><th>Leben</th><th>Auto</th><th>Einkommen</th><th>offen</th></tr></thead>` +
+    /* „davon" im Kopf, nicht in einer Fußnote: die Spalte ist ein Teil von „Leben" und
+       darf beim Überfliegen nicht wie ein weiterer Abfluss aussehen. */
+    `<table><thead><tr><th>Monat</th><th>Leben</th><th>davon Lebensmittel</th><th>Auto</th><th>Einkommen</th><th>offen</th></tr></thead>` +
     `<tbody>${monate}</tbody></table></div>` +
     (s.open.length
       ? `<div class="stmt-found">Diese Empfänger kennt der Rechner nicht. Einmal einsortieren, dann merkt er sie sich.` +
         `<button type="button" class="hbtn" data-help="kategorien">?</button></div>${offen}`
       : `<div class="stmt-found">Alles zugeordnet.</div>`) +
-    (ab.ok ? kapazitaet(ab) : "") +
+    (ab.ok ? kapazitaet(ab) + einkauf(ab) : "") +
     (!ab.ok
       ? `<div class="stmt-hint">${esc(ab.reason)}</div>`
       : Math.abs(Math.round(ab.living) - state.living) < 1
@@ -89,7 +95,9 @@ function zeigeUmsaetze() {
     btn.addEventListener("click", () => {
       /* Aus der Antwort wird eine Regel. Der Gruppenschlüssel ist der normalisierte
          Empfängername — genau der Text, an dem die nächste Buchung wiedererkannt wird. */
-      ledgers.rules.unshift({ pat: btn.dataset.grp, cat: btn.dataset.cat });
+      const regel = { pat: btn.dataset.grp, cat: btn.dataset.cat };
+      if (btn.dataset.sub) regel.sub = btn.dataset.sub;
+      ledgers.rules.unshift(regel);
       persist();
       zeigeUmsaetze();
     }),
@@ -179,6 +187,36 @@ function merkeImport() {
       ),
   );
   ledgers.imports.push(letzteEinlesung);
+}
+
+
+/** Was von der Lebenshaltung auf Einkäufe entfällt.
+ *
+ *  Steht unter der Lebenshaltung und nicht daneben, weil es ein Teil von ihr ist: die
+ *  beiden Zahlen dürfen nicht addiert werden. Median und Schnitt stehen zusammen, sonst
+ *  sieht ein Monat mit Großeinkauf aus wie der Normalfall.
+ */
+function einkauf(ab) {
+  const g = ab.groceries;
+  if (!g) return "";
+  /* Nichts erkannt heißt nicht „nichts ausgegeben". Der Hinweis sagt, was zu tun ist,
+     statt eine Null anzuzeigen, die niemand glauben sollte. */
+  if (!(g.mean > 0))
+    return (
+      `<div class="stmt-hint">Kein Lebensmitteleinkauf erkannt. Sortier die Läden oben ` +
+      `unter „Lebensmittel“ ein, dann steht hier, was der Einkauf im Monat kostet.</div>`
+    );
+
+  const fehlend = g.blank
+    ? ` In ${plural(g.blank, "Monat", "Monaten")} wurde gar kein Einkauf erkannt. Dort fehlt ein Laden in den Regeln, und die Zahl ist zu niedrig.`
+    : "";
+  return (
+    `<div class="stmt-found"><b>Davon Lebensmittel</b>: im Median <b>${eur(g.median)} €</b> im Monat, ` +
+    `im Schnitt ${eur(g.mean)} €. Das sind ${Math.round(g.share * 100)} % der Lebenshaltung.` +
+    `<div class="stmt-hint">Die Zahl steckt bereits in der Lebenshaltung, sie kommt nicht dazu.` +
+    fehlend +
+    `</div></div>`
+  );
 }
 
 

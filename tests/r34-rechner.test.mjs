@@ -1681,7 +1681,7 @@ test("MT940: Stornobuchungen fallen nicht heraus und kehren das Vorzeichen um", 
   );
 });
 
-const { summarise, derive, categorise, merchantOf, SEED_RULES } = await import(
+const { summarise, derive, categorise, merchantOf, SEED_RULES, LEBENSMITTEL } = await import(
   `${SRC}/spending.js`
 );
 
@@ -1833,6 +1833,123 @@ test("richtungsabhängige Regeln: Stadtkasse rein ist Geld, raus wäre Steuer", 
   const raus = { month: "2026-06", amt: -349, name: "", text: "Stadtkasse Hildesheim Grundsteuer" };
   assert.equal(categorise(rein).cat, "einkommen");
   assert.notEqual(categorise(raus).cat, "einkommen");
+});
+
+/* ---------------- Lebensmittel als Teil der Lebenshaltung ---------------- */
+
+test("Lebensmittel zählen in der Lebenshaltung mit, nicht daneben", () => {
+  const s = summarise(readStatement(fixture("camt-umsaetze.xml")).entries);
+  const april = s.months.find((m) => m.month === "2026-04");
+  assert.ok(april.lebensmittel > 0, "EDEKA und REWE müssen als Einkauf erkannt werden");
+  assert.ok(april.lebensmittel < april.leben, "Teilmenge, keine zweite Summe");
+  /* Die Verfeinerung darf die Lebenshaltung selbst nicht bewegen. Täte sie es, wäre der
+     Kauftermin von einer Anzeigeentscheidung abhängig. */
+  assert.ok(Math.abs(april.leben - 704.2) < 0.01, `Lebenshaltung steht auf ${april.leben}`);
+});
+
+test("Lebensmittel bleiben in jedem Monat kleiner als die Lebenshaltung", () => {
+  for (const datei of ["camt-umsaetze.xml", "camt-sparkasse.xml"])
+    for (const m of summarise(readStatement(fixture(datei)).entries).months)
+      assert.ok(
+        m.lebensmittel <= m.leben + 0.005,
+        `${datei} ${m.month}: ${m.lebensmittel} über ${m.leben}`,
+      );
+});
+
+test("Essen unterwegs und Drogerie sind keine Lebensmittel", () => {
+  const monat = (name) =>
+    summarise([{ month: "2026-04", amt: -40, name, text: "" }]).months[0];
+  assert.equal(monat("REWE Markt").lebensmittel, 40);
+  assert.equal(monat("McDonalds Hannover").lebensmittel, 0, "Gastro ist eine andere Gewohnheit");
+  assert.equal(monat("Rossmann Hildesheim").lebensmittel, 0, "Drogerie ist Haushalt");
+  for (const n of ["REWE Markt", "McDonalds Hannover", "Rossmann Hildesheim"])
+    assert.equal(monat(n).leben, 40, `${n} bleibt Lebenshaltung`);
+});
+
+test("eine Erstattung vom Supermarkt mindert auch die Lebensmittel", () => {
+  const s = summarise([
+    { month: "2026-01", amt: -120, name: "REWE", text: "Einkauf" },
+    { month: "2026-01", amt: 20, name: "REWE", text: "Erstattung Retoure" },
+  ]);
+  assert.equal(s.months[0].leben, 100);
+  assert.equal(s.months[0].lebensmittel, 100, "sonst driften Summe und Teilmenge auseinander");
+});
+
+/** Drei volle Monate mit steigendem Einkauf: 200, 250, 450. */
+const einkaufsmonate = () =>
+  [
+    ["2026-04", [100, 60, 40]],
+    ["2026-05", [100, 100, 50]],
+    ["2026-06", [200, 150, 100]],
+  ].flatMap(([month, [rewe, edeka, aldi]]) => [
+    { month, amt: 1900, name: "Arbeitgeber", text: "Gehalt" },
+    { month, amt: -600, name: "Hausverwaltung", text: "Miete" },
+    { month, amt: -10, name: "Netflix", text: "" },
+    { month, amt: -rewe, name: "REWE Markt", text: "" },
+    { month, amt: -edeka, name: "EDEKA Hildesheim", text: "" },
+    { month, amt: -aldi, name: "ALDI SUED", text: "" },
+  ]);
+
+test("die Ableitung nennt Median, Schnitt und Anteil der Einkäufe", () => {
+  const d = derive(summarise(einkaufsmonate()));
+  assert.equal(d.groceries.median, 250, "der normale Monat");
+  assert.equal(d.groceries.mean, 300, "was der Zeitraum tatsächlich gekostet hat");
+  /* Beide Zahlen, weil der Abstand zwischen ihnen die Information trägt: ein
+     Großeinkaufsmonat hebt den Schnitt, ohne über den Normalfall etwas zu sagen. */
+  assert.ok(d.groceries.mean > d.groceries.median);
+  // Anteil gegen denselben Median, den der Plan übernimmt
+  assert.equal(d.living, 860);
+  assert.ok(Math.abs(d.groceries.share - 250 / 860) < 1e-9, `${d.groceries.share}`);
+  assert.equal(d.groceries.blank, 0);
+});
+
+test("Monate ohne erkannten Einkauf werden gezählt statt als Null durchgereicht", () => {
+  /* Niemand isst umsonst. Ein Monat ohne einen einzigen Einkauf heißt, dass ein Laden
+     in den Regeln fehlt, und dann ist die Zahl zu niedrig statt richtig.
+
+     Der Monat behält seine sechs Buchungen, nur unter anderem Namen: mit weniger als
+     fünf gälte er als angeschnitten und fiele ganz aus der Auswertung. */
+  const ohne = einkaufsmonate().map((e) =>
+    e.month === "2026-06" && /REWE|EDEKA|ALDI/.test(e.name)
+      ? { ...e, name: "Krankenkasse" }
+      : e,
+  );
+  const d = derive(summarise(ohne));
+  assert.equal(d.months, 3, "der Monat bleibt ein voller Monat");
+  assert.equal(d.groceries.blank, 1);
+});
+
+test("eine gelernte Regel kann Lebensmittel sein", () => {
+  const entries = [{ month: "2026-04", amt: -55, name: "Hofladen Sonnenschein", text: "" }];
+  const ohne = summarise(entries).months[0];
+  assert.equal(ohne.offen, 55, "unbekannt bleibt offen");
+
+  const mit = summarise(entries, [
+    { pat: "hofladen sonnenschein", cat: "leben", sub: LEBENSMITTEL },
+  ]).months[0];
+  assert.equal(mit.leben, 55);
+  assert.equal(mit.lebensmittel, 55);
+  assert.equal(mit.offen, 0);
+});
+
+test("eine Unterkategorie an einer fremden Kategorie zählt nicht mit", () => {
+  /* `lebensmittel` ist per Definition ein Teil von `leben`. Eine Regel aus einem
+     eingelesenen Plan darf die Invariante nicht aufbrechen. */
+  const s = summarise([{ month: "2026-04", amt: -30, name: "Tankstelle", text: "" }], [
+    { pat: "tankstelle", cat: "auto", sub: LEBENSMITTEL },
+  ]);
+  assert.equal(s.months[0].auto, 30);
+  assert.equal(s.months[0].lebensmittel, 0);
+});
+
+test("eine Regel mit unbekannter Kategorie fällt aus, statt den Monatssatz zu treffen", () => {
+  /* `m[cat] -= amt` nahm jeden Text als Schlüssel. `cat: "month"` überschrieb damit den
+     Monat selbst, und die Buchung verschwand aus jeder Summe. */
+  const s = summarise([{ month: "2026-04", amt: -30, name: "Testladen", text: "" }], [
+    { pat: "testladen", cat: "month" },
+  ]);
+  assert.equal(s.months[0].month, "2026-04");
+  assert.equal(s.months[0].offen, 30, "die Buchung bleibt offen statt falsch zu zählen");
 });
 
 /* ---------------- Sparweise mit Wechsel ---------------- */

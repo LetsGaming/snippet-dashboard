@@ -293,10 +293,22 @@ if (JSDOM) {
     assert.match(spend.textContent, /Kleinbrauerei/, "der unbekannte Empfänger muss auftauchen");
     assert.ok(spend.querySelector('[data-cat="leben"]'), "Einsortier-Knöpfe fehlen");
 
+    /* Der Einkauf steht als Teil der Lebenshaltung da: eigene Spalte, eigener Anteil,
+       aber keine zweite Summe. EDEKA und REWE stecken in der Datei. */
+    assert.ok(
+      [...spend.querySelectorAll("th")].some((n) => /Lebensmittel/.test(n.textContent)),
+      "die Spalte „davon Lebensmittel“ fehlt",
+    );
+    assert.match(spend.textContent, /% der Lebenshaltung/, "der Anteil muss dastehen");
+    const lm = spend.querySelector('[data-sub="lebensmittel"]');
+    assert.ok(lm, "der Knopf „Lebensmittel“ fehlt");
+    assert.equal(lm.dataset.cat, "leben", "er verfeinert Leben, er ersetzt es nicht");
+
     // Einsortieren erzeugt eine Regel und blendet den Posten aus
     spend.querySelector('[data-cat="leben"]').click();
     await settle();
     assert.equal(ledgers.rules.length, 1);
+    assert.equal(ledgers.rules[0].sub, undefined, "ohne Knopf keine Unterkategorie");
     assert.match(el("stmtSpend").textContent, /Alles zugeordnet/);
 
     // und der Vorschlag landet im Feld
@@ -323,6 +335,37 @@ if (JSDOM) {
     ledgers.rules.length = 0;
     ledgers.actual.length = 0;
     put("f_living", 950);
+    render();
+    await settle();
+  });
+
+  test("Kontoauszug: „Lebensmittel“ merkt sich die Verfeinerung, nicht nur die Kategorie", async () => {
+    const { readFileSync } = await import("node:fs");
+    const xml = readFileSync(new URL("./fixtures/camt-umsaetze.xml", import.meta.url), "utf8");
+    ledgers.actual.length = 0;
+    ledgers.rules.length = 0;
+
+    const input = el("stmtFile");
+    Object.defineProperty(input, "files", {
+      value: [{ name: "umsaetze.xml", arrayBuffer: async () => new TextEncoder().encode(xml).buffer }],
+      configurable: true,
+    });
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await settle();
+
+    el("stmtSpend").querySelector('[data-sub="lebensmittel"]').click();
+    await settle();
+    assert.deepEqual(ledgers.rules[0], {
+      pat: "Kleinbrauerei Sonnenschein",
+      cat: "leben",
+      sub: "lebensmittel",
+    });
+    /* Ohne die Unterkategorie in der Regel käme der Posten beim nächsten Auszug als
+       gewöhnliche Lebenshaltung zurück und der Einkauf wäre still zu niedrig. */
+    assert.match(el("stmtSpend").textContent, /Davon Lebensmittel/);
+
+    ledgers.rules.length = 0;
+    ledgers.actual.length = 0;
     render();
     await settle();
   });
